@@ -1,0 +1,38 @@
+# Local-only files — never committed
+CLAUDE.md
+.claude/
+
+# Secrets / environment
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/build/
+npm-debug.log*
+
+# Data artifacts (raw pulls, model files, run logs) — regenerated, not versioned
+data/raw/
+data/processed/
+data/artifacts/
+logs/
+*.log
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
