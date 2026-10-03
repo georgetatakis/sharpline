@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     # SecretStr keeps the key out of logs and reprs; read it with .get_secret_value().
     odds_api_key: SecretStr = SecretStr("")
     log_level: str = "INFO"
+    # Browser origin allowed to call the API (the React dev server by default).
+    frontend_origin: str = "http://localhost:5173"
 
 
 @lru_cache
