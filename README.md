@@ -10,14 +10,14 @@ betting market.
 |-------------|------------------------------------------------------------------|
 | `backend/`  | FastAPI app, SQLAlchemy models, Alembic migrations, pytest tests |
 | `frontend/` | React (Vite) + Tailwind + Recharts UI                            |
-| `data/`     | Ingestion scripts (`data/ingestion/`) and model modules (`data/models/`), run as scheduled scripts rather than called live by the API |
+| `data/`     | CSV and sidecar templates, and the data README. Screenshots (`data/inbox/`) and extracted CSVs (`data/extracted/`) stay local. See [data/README.md](data/README.md) |
 
 ## Tech stack
 
 - **Backend:** Python, FastAPI, SQLAlchemy, Alembic
 - **Database:** PostgreSQL
-- **Data / modeling:** pandas, nfl_data_py, scikit-learn, XGBoost
-- **Odds:** The Odds API
+- **Data / modeling:** pandas, scikit-learn, XGBoost
+- **Data entry:** screenshots and chat-pulled CSVs, loaded by one import script
 - **Frontend:** React, Tailwind CSS, Recharts
 - **Local dev:** Docker Compose
 
