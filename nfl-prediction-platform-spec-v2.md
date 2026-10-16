@@ -1,215 +1,465 @@
-# NFL Prediction Platform — Project Spec (v2)
+# NFL Prediction Platform: Project Spec (v3, screenshots plus chat-pulled CSVs)
 
 ## Purpose
 
-Personal project, built to eventually be usable by other people, and to bring up
-in software engineering interviews as a real full-stack, self-directed build.
-Framed publicly as a **predictive analytics platform** with a market-comparison
-feature, covering game outcomes, player props, and anytime-TD probability.
+Personal project, built to be usable by other people later and to bring up in
+software engineering interviews as a full-stack, self-directed build. Framed publicly
+as a predictive analytics platform with a market-comparison feature, covering game
+outcomes, player props, and anytime-TD probability.
+
+Data approach: the app has no scrapers, no scheduled fetching, and no API keys. Every
+number reaches Postgres through one importer, from one of two paths. Path A is a
+screenshot that George captures and Claude Code transcribes to CSV. Path B is a CSV
+that Claude writes in a separate chat after reading a public page or a sports data
+feed on request. Both paths produce the same CSV format and go through the same
+validation.
 
 ---
 
 ## Workflow with Claude Code
 
-A `CLAUDE.md` file at the repo root enforces this automatically (Claude Code reads
-it on start) — this section is the human-readable version of the same rules:
+A `CLAUDE.md` file in the local project folder enforces this automatically (Claude
+Code reads it on start). This section is the human-readable version of the same rules.
 
-1. **Claude Code implements the step only.** It writes/edits the files needed for
-   that step and stops. It never runs `git add`, `git commit`, or `git push` — those
-   are read-only-safe commands only (`git status`, `git diff`, `git log` are fine to
-   run; anything that changes repo state is not).
-2. **Claude Code never adds `Co-authored-by: Claude` or any Claude/Anthropic
-   attribution to a commit message**, including in messages it only drafts for
-   George to use. Every commit shows georgetatakis as sole author.
-3. **After finishing a step, Claude Code must end its reply with three sections,
-   in order:**
-   - **What this step did** — files touched, what they do
-   - **What's next** — what the following step will build, before starting it
-   - **Git commands** — the exact `git add` / `git commit -m "..."` commands George
-     should type himself, printed as a code block, never run by Claude Code
-4. George reviews the diff, runs the printed git commands himself (editing the
-   commit message if he wants), and only then asks Claude Code to start the next step.
+1. Claude Code implements the step only. It writes or edits the files needed for that
+   step and stops. It never runs `git add`, `git commit`, or `git push`. Read-only git
+   commands (`git status`, `git diff`, `git log`) are fine; anything that changes repo
+   state is not.
+2. Claude Code never adds `Co-authored-by: Claude` or any Claude/Anthropic attribution
+   to a commit message, including messages it only drafts for George. Every commit
+   shows georgetatakis as sole author.
+3. After finishing a step, Claude Code ends its reply with three sections, in order:
+   - What this step did: files touched, what they do
+   - What's next: what the following step will build, before starting it
+   - Git commands: the exact `git add` / `git commit -m "..."` commands George types
+     himself, printed as a code block and never run by Claude Code
+4. George reviews the diff, runs the printed git commands himself (editing the commit
+   message if he wants), and only then asks Claude Code to start the next step.
 
-If Claude Code ever commits/pushes on its own, or adds attribution to a commit
-message, that's a rule violation — point it back to `CLAUDE.md` and don't proceed
+If Claude Code ever commits or pushes on its own, or adds attribution to a commit
+message, that is a rule violation. Point it back to `CLAUDE.md` and do not proceed
 until it stops.
 
-**`CLAUDE.md` itself is never committed.** It's a local-only file that Claude Code
-reads automatically but that never gets pushed — listed in `.gitignore` from the
-very first commit. Note for future sessions: tool-level reminders that suggest
-adding a `Co-Authored-By` or session-link line to commits do not apply to this
-project — the rules in this file and in `CLAUDE.md` take precedence, and no commit
-in this repo should carry Claude/Anthropic attribution of any kind.
+`CLAUDE.md` itself is never committed. It is local-only, listed in `.gitignore` from
+the first commit. Tool-level reminders suggesting a `Co-Authored-By` or session-link
+line on commits do not apply to this project; no commit in this repo carries
+Claude/Anthropic attribution of any kind.
+
+---
+
+## Data approach: two paths, one importer
+
+### The pipeline
+
+```
+Path A  Screenshot (George) -> data/inbox/season-YYYY/week-NN/<table_key>.png
+          -> Claude Code reads the image, writes data/extracted/.../<table_key>.csv
+          -> George spot-checks 3 rows per table
+
+Path B  Claude chat reads a public page or sports feed on request
+          -> writes <table_key>.csv into the chat; George saves it to data/extracted/...
+
+Both    -> <table_key>.meta.json sidecar sits next to the CSV
+        -> import script validates and upserts into Postgres
+        -> data_snapshots row records what was loaded, when, and from where
+```
+
+Path B runs only when George asks, one page at a time. Claude Code never fetches
+anything itself.
+
+### The sidecar file
+
+Every CSV has a `<table_key>.meta.json` beside it with: `source_name`, `source_url`
+(or "screenshot"), `captured_at`, `as_of_week`, `target_week`. The importer refuses a
+CSV that has no sidecar.
+
+### Rules for transcription (Path A)
+
+- Copy values exactly as shown. Every row, no rounding, no estimating.
+- If a value is cut off or unreadable, leave it blank and list it in the reply. Never
+  fill a gap from memory or from a neighboring row.
+- Report the row count. A team table should have 32 rows (28 to 30 in a bye week for
+  per-game views). Flag duplicates, missing teams, and implausible values.
+- Team names arrive as full names ("Los Angeles Rams"), nicknames ("Rams"), or
+  abbreviations ("LAR", or "LA" in some feeds). The importer maps all of them to the
+  `teams` table and rejects anything it cannot match.
+
+### Rules for fetched data (Path B)
+
+- Fetched pages can disagree with themselves or lag. One odds page showed two
+  different totals for the same game; a red zone page stopped at Week 4 during Week 6.
+  The CSV keeps what the source showed, with `captured_at`.
+- The importer flags a source that is behind `as_of_week`, and a spread or total that
+  differs by more than 1 point between two sources for the same game.
+- Moneyline prices come from sportsbook screenshots only. The odds page tested showed
+  percentages, not prices.
+- Ties are real results. A 27-27 game is stored as a tie, and standings feeds that drop
+  ties are not used as a source of record.
+- A feed's per-quarter scoring split is not trusted. Final scores and scoring plays are.
+
+### Snapshot semantics (this prevents leaking the future into a prediction)
+
+Season-to-date tables describe games already played. A capture made on Tuesday of
+Week 6 says "through Week 5" and is used to predict Week 6 games. Every import records
+`as_of_week` (5) and `target_week` (6). A model may only read rows whose `as_of_week`
+is strictly before the week it is predicting. Overwriting last week's numbers with this
+week's destroys history, so rows are keyed by team + season + `as_of_week` and never
+edited in place.
+
+### Weekly routine
+
+1. After Monday Night Football, capture the team-stat screenshots (about 12) into
+   `data/inbox/season-2026/week-NN/`, one file per table, named with the `table_key`.
+2. In a Claude chat, ask for the week's schedule, scores and box stats for finished
+   games, scoring plays, spreads and totals, and the red zone pages. Save each CSV and
+   sidecar it writes into `data/extracted/season-2026/week-NN/`.
+3. Screenshot sportsbook moneylines and four prop markets (receiving yards, receptions,
+   rushing yards, anytime TD) for tracked players.
+4. After the games, screenshot the weekly stat leader pages (receiving yards, rushing
+   yards, receptions) to settle yardage props. Scoring plays settle anytime-TD picks.
+5. Ask Claude Code to transcribe the screenshots and import everything. The Data
+   Checklist tab shows what is still missing.
+
+### Source terms and privacy
+
+Every source has its own terms, and they differ.
+
+- The charted stats come from a paid analytics site. Its terms prohibit automated
+  access and also prohibit copying material, by hand or by script, without written
+  consent. Email the site and ask whether personal, non-commercial use of the tables in
+  this project is allowed. Until there is a written yes, treat that source as private.
+- Public odds pages, the red zone pages, and the sports feed are read one page at a
+  time on request. Check each site's terms before making any of it routine.
+- Sportsbook screenshots are for personal use.
+
+Until permissions are settled:
+
+- Raw screenshots and extracted CSVs stay out of git (`data/inbox/` and
+  `data/extracted/` are in `.gitignore`).
+- Nothing from a restricted source appears in a public deployment or in README
+  screenshots. The public demo runs on synthetic sample data (see the demo-mode step).
+
+---
+
+## Data catalog (the checklist)
+
+Path A is a screenshot, Path B is a chat-pulled CSV. Status reflects the Week 6
+capture folder (stats through Week 5) plus what was tested in chat. "Have" means a
+usable screenshot exists. Five files in that folder were duplicates and one was blank,
+so they add nothing.
+
+### Team stats from the charting source
+
+| table_key | Columns | Path | Status |
+|---|---|---|---|
+| team_offense_metrics | EPA/play, yards/play, points/drive, explosive play rate, down conversion rate | A | Have |
+| team_defense_metrics | Same five, allowed | A | Have |
+| offensive_tendencies | Motion rate, play action rate, air yards/att, shotgun rate, no-huddle rate | A | Have |
+| offensive_pace_volume | Plays/game, adjusted plays/game, plays/drive, drives/game, time of possession | A | Have |
+| offensive_pace_tempo | Play clock used, neutral play clock, neutral pass rate, gear change, no-huddle % | A | Missing |
+| personnel_usage | 11, 12, 13, 21, 22, 2+TE, 2+RB, 3+WR, plays | A | Have |
+| personnel_efficiency | EPA/play, yards/play, success rate by grouping | A | Optional |
+| offensive_line | Pressure rate allowed, no-blitz pressure allowed, time to throw, yards before contact per RB rush, rush stuff rate | A | Have |
+| defensive_line | Pressure rate, no-blitz pressure rate, yards before contact per RB rush, rush stuff rate | A | Have |
+| defensive_tendencies | Blitz rate, light box rate, heavy box rate, sub package rate | A | Have |
+| man_zone_coverage | Man rate, zone rate, middle closed rate, middle open rate | A | Have |
+| positional_coverage | Yards per target allowed to WR, TE, RB, outside, slot | A | Have |
+| proe_matchups | Offense PROE, defense PROE, matchup score, for the target week | A | Have (Week 6) |
+| proe_offense_defense | Season-to-date PROE for all 32 teams (Offense and Defense tabs) | A | Optional |
+
+### Schedule, results, box scores
+
+| table_key | Columns | Path | Status |
+|---|---|---|---|
+| weekly_matchups | Teams, home/away, kickoff for the target week | B (sports feed) | Chat-pulled |
+| game_results | Final score per game, including ties | B (sports feed) | Chat-pulled |
+| advanced_box_score | Team box stats per game: plays, yards, time of possession, rush and pass splits, red zone attempts and targets, air yards, blitzes faced, pocket time, penalties, turnovers | B (sports feed) | Chat-pulled |
+| scoring_plays | Every scoring play with period, clock, scorer name | B (sports feed) | Chat-pulled |
+
+### Betting data
+
+| table_key | Columns | Path | Status |
+|---|---|---|---|
+| game_lines (spread, total) | Spread and total per game, with capture time | B (public odds page) | Chat-pulled |
+| game_lines (moneyline) | Moneyline prices both sides | A (sportsbook) | Missing |
+| game_lines_closing | Spread, total, moneyline shortly before kickoff, for judging edge against the close | A | Missing |
+| player_prop_lines | Player, prop type, line, over price, under price (receiving yards, receptions, rushing yards) | A (sportsbook) | Missing |
+| anytime_td_odds | Player, price | A (sportsbook) | Missing |
+
+### Player data
+
+| table_key | Columns | Path | Status |
+|---|---|---|---|
+| player_usage | Snap share, targets, target share, air yards, carries, rushing and receiving yards, TDs | A (league-wide pages) | Missing |
+| player_red_zone | Red zone targets, rushes, and receptions per player, by week | B (one page per team) | Chat-pulled (tested for one team) |
+| player_results | Weekly receiving yards, rushing yards, receptions for tracked players | A (weekly stat leaders) | Missing |
+| team_red_zone | Red zone TD rate, offense and allowed | derive from box scores | Optional |
+| injuries | Out, doubtful, and questionable players for the week | A | Optional |
+
+Minimum to get the game model running: everything marked Have, plus
+offensive_pace_tempo, weekly_matchups, advanced_box_score, and game_lines. Player and TD
+tables are only needed once Phase 4 starts.
 
 ---
 
 ## Tech Stack
 
-| Layer          | Choice                                                        |
-|----------------|-----------------------------------------------------------------|
-| Frontend       | React (JavaScript), Tailwind CSS, Recharts                     |
-| Backend        | Python, FastAPI, SQLAlchemy, Alembic (migrations)               |
-| Database       | PostgreSQL                                                      |
-| Data ingestion | pandas, nfl_data_py                                              |
-| Modeling       | scikit-learn, XGBoost                                           |
-| Odds data      | The Odds API                                                     |
-| Deployment     | Docker Compose (local), Render or Railway (hosted)               |
-| CI/CD          | GitHub Actions — added once core app works, not up front         |
+| Layer | Choice |
+|---|---|
+| Frontend | React (JavaScript), Tailwind CSS, Recharts |
+| Backend | Python, FastAPI, SQLAlchemy, Alembic (migrations) |
+| Database | PostgreSQL |
+| Data handling | pandas (CSV validation and feature building) |
+| Modeling | scikit-learn, XGBoost (after enough data exists, see Validation) |
+| Data entry | Path A screenshots and Path B chat-pulled CSVs, both loaded by one import script |
+| Deployment | Docker Compose (local), Render or Railway (hosted) |
+| CI/CD | GitHub Actions, added once the core app works |
 
-Backend and modeling live in one Python codebase — no separate services. FastAPI
-handles requests; the same codebase has ingestion/model modules run as scheduled
-scripts, not called live by the API.
+Removed from v2: nfl_data_py. The Odds API is not used, and stays on the table as an
+optional step (step 32) once its free plan is confirmed to cover the markets needed.
+The importer is source-agnostic and tags every snapshot with its source, so a bulk
+historical loader or an odds script can be added later without changing the schema.
+
+One Python codebase, no separate services. FastAPI serves requests; import and model
+modules run as scripts.
 
 ---
 
 ## Architecture
 
 ```
-nfl_data_py (team + player stats) ──┐
-Manual CSV imports (charted stats)  ─┼──▶ FastAPI + SQLAlchemy ──▶ Postgres ◀── React frontend
-The Odds API (game + prop odds)  ────┘
-                                       ▲
-                    Model modules (game / prop / TD) — write predictions to Postgres
+Screenshots -> CSV (Claude Code) --+
+                                   +-> sidecar + import script -> Postgres <- FastAPI <- React
+Chat-pulled CSV (Claude chat) -----+                                ^
+                         Model modules (game / prop / TD) write predictions here
 ```
-
-Manual imports (blitz rate, coverage, target share, run-stuff rate, YBC — anything
-not free via nfl_data_py) are ongoing, not one-time. Build the CSV import tooling
-to be reusable, since you're committing to doing this regularly.
 
 ---
 
-## Validation strategy
+## Validation strategy: forward only
 
-Before anything touches live odds: backtest every model against a completed
-season (2024 or 2025) where outcomes are already known. This gets you a real,
-immediate hit-rate number and calibration chart before you ever risk pointing
-the system at live/current data. Once backtested and validated, extend the same
-pipeline to ingest the live current season.
+Captures reflect the present, so a completed season cannot be replayed. Instead:
+
+- Every prediction is written and timestamped before kickoff, then locked.
+- Results are imported after games finish and each prediction is settled as hit, miss,
+  or push (a spread that lands on the number, or a tie on a moneyline).
+- Hit rate and calibration build up week by week. With about 14 games a week, expect
+  a calibration chart to be noisy for the first month. Say so on the page.
+- Training data does not exist on day one. Each model starts as a baseline with
+  documented, hand-set weights (version `v0`). A learned model (XGBoost or
+  regression) gets trained once at least 50 settled games with valid snapshots exist,
+  then runs next to the baseline. Compare them week by week on games neither saw.
+- The week 1 to 5 results already played cannot be used to train, because only
+  through-Week-5 stats exist for them. Treat them as context, not training rows.
 
 ---
 
 ## Model types (three distinct problems, built in this order)
 
-1. **Game outcome** — regression/XGBoost predicting spread and win probability from team EPA, pace, SoS, coverage/pressure stats. Most mature free data, build first.
-2. **Player prop over/under** — regression predicting a player's expected stat line (yards, receptions, etc.), compared against the sportsbook line. Needs player-level usage data (snaps, targets, red zone touches) — build second, once game-level pipeline is proven.
-3. **Anytime TD scorer** — this is a classification/probability problem, not a regression. Use logistic regression or a Poisson-based approach on red zone touches, goal-line share, opponent TD rate allowed. Hardest data requirements, hardest to validate cleanly — build last.
+1. Game outcome: predicted margin and win probability from offense and defense EPA,
+   pace, personnel, pressure and coverage tendencies, and PROE. Baseline v0 first,
+   learned v1 later.
+2. Player prop over/under: expected stat line (yards, receptions) compared against
+   the posted line. Baseline v0 is a usage-weighted rolling average adjusted by the
+   opponent's positional yards-per-target allowed.
+3. Anytime TD scorer: a probability problem, not a regression. Logistic or Poisson
+   approach on red zone usage, goal-line share, and opponent TD rate allowed.
 
-Each model type gets its own module, its own `model_version` tracking, and its own row in the results/hit-rate tables — they should never be blended into one "score."
+Each model type has its own module, its own `model_version`, and its own rows in the
+results tables. They are never blended into one score.
 
 ---
 
 ## Database Schema
 
-**Core entities**
-- `teams` — id, name, abbreviation, conference, division
-- `players` — id, name, team_id, position
-- `games` — id, season, week, home_team_id, away_team_id, kickoff_time
+Core entities
+- `teams`: id, name, nickname, abbreviation, conference, division
+- `players`: id, name, team_id, position
+- `games`: id, season, week, home_team_id, away_team_id, kickoff_time, status
+  (scheduled, final), home_score, away_score. Ties are stored as ties.
 
-**Stats (source-tagged: `nfl_data_py` vs `manual_import`)**
-- `team_offense_stats` — team_id, season, week, epa_per_play, pace/plays metrics, motion_rate, play_action_rate, air_yards_per_att, shotgun_rate, no_huddle_rate, personnel_11_rate, personnel_12_rate, source
-- `team_defense_stats` — team_id, season, week, epa_per_play_allowed, ypt_allowed_wr/te/rb, ypt_allowed_outside/slot, man_rate, zone_rate, pressure_rate, blitz_rate, rush_stuff_rate, ybc_per_rush, source
-- `strength_of_schedule` — team_id, season, sos_value, method_used
-- `player_weekly_stats` — player_id, season, week, snaps, snap_share, targets, target_share, carries, red_zone_touches, air_yards, receiving_yards, rushing_yards, tds, source
+Import tracking
+- `data_snapshots`: id, season, as_of_week, target_week, table_key, source_name,
+  source_url, captured_at, file_name, row_count, status (loaded, partial, rejected), notes
 
-**Odds**
-- `odds_snapshots` — game_id, sportsbook, market_type, line, price, captured_at
-- `player_prop_odds` — player_id, game_id, prop_type, line, over_price, under_price, sportsbook, captured_at
+Team stats (wide tables, one row per team + season + as_of_week, each import fills
+its own columns by upsert)
+- `team_offense_stats`: team_id, season, as_of_week, epa_per_play, yards_per_play,
+  points_per_drive, explosive_play_rate, down_conversion_rate, motion_rate,
+  play_action_rate, air_yards_per_att, shotgun_rate, no_huddle_rate, plays_per_game,
+  adj_plays_per_game, plays_per_drive, drives_per_game, time_of_possession,
+  play_clock_used, neutral_play_clock, neutral_pass_rate, gear_change,
+  pers_11, pers_12, pers_13, pers_21, pers_22, pers_2te, pers_2rb, pers_3wr,
+  ol_pressure_rate_allowed, ol_no_blitz_pressure_allowed, time_to_throw,
+  ol_ybc_per_rb_rush, ol_rush_stuff_rate, off_proe, rz_td_rate
+- `team_defense_stats`: team_id, season, as_of_week, epa_per_play_allowed,
+  yards_per_play_allowed, points_per_drive_allowed, explosive_play_rate_allowed,
+  down_conversion_rate_allowed, blitz_rate, light_box_rate, heavy_box_rate,
+  sub_package_rate, dl_pressure_rate, dl_no_blitz_pressure_rate, dl_ybc_per_rb_rush,
+  dl_rush_stuff_rate, man_rate, zone_rate, middle_closed_rate, middle_open_rate,
+  ypt_allowed_wr, ypt_allowed_te, ypt_allowed_rb, ypt_allowed_outside,
+  ypt_allowed_slot, def_proe, rz_td_rate_allowed
 
-**Predictions & validation**
-- `model_predictions` — game_id, model_type (game/prop/td), model_version, predicted_value, predicted_prob, created_at
-- `player_predictions` — player_id, game_id, prop_type, model_version, predicted_value, predicted_prob, created_at
-- `prediction_results` — prediction_id, prediction_table, actual_value, hit (boolean), confidence_bucket, settled_at
+Game data (from the sports feed)
+- `game_team_stats`: game_id, team_id, plays, total_yards, time_of_possession,
+  rush_attempts, rush_yards, pass_attempts, pass_completions, pass_yards, air_yards,
+  sacks_taken, turnovers, penalties, penalty_yards, redzone_rush_attempts,
+  redzone_targets, blitzes_faced, avg_pocket_time
+- `game_scoring_plays`: game_id, period, clock, description, scoring_team_id,
+  scorer_name, scorer_player_id (nullable), play_type (td_pass, td_rush, fg, xp,
+  two_point, other)
 
-`prediction_results` is what powers both the long-run calibration chart *and* the
-week-by-week "Weekly Check" tab in the frontend (Phase 3, step 16-17) — same
-underlying data, two different views: aggregate accuracy over time vs. a literal
-prediction-vs-actual scoreboard for one specific week.
+Betting data
+- `game_lines`: game_id, line_type (open, current, closing), spread_home, moneyline_home,
+  moneyline_away, total, captured_at, source_name, book_label. Moneyline columns are
+  nullable, because spread and total can arrive from a different source than prices.
+- `player_prop_lines`: player_id, game_id, prop_type, line, over_price, under_price,
+  captured_at, book_label
 
-**Future (not built in v1, schema allows it later)**
-- `users` — id, email, created_at (nothing references this yet — predictions/results stay user-agnostic so adding accounts later is additive, not a rewrite)
+Player data
+- `player_weekly_stats`: player_id, season, week, snaps, snap_share, targets,
+  target_share, carries, red_zone_touches, red_zone_targets, goal_line_carries,
+  air_yards, receiving_yards, rushing_yards, receptions, tds
+
+Predictions and validation
+- `model_predictions`: game_id, model_type (game, prop, td), model_version,
+  predicted_value, predicted_prob, snapshot_as_of_week, locked_at
+- `player_predictions`: player_id, game_id, prop_type, model_version, predicted_value,
+  predicted_prob, snapshot_as_of_week, locked_at
+- `prediction_results`: prediction_id, prediction_table, actual_value, outcome (hit,
+  miss, push), confidence_bucket, settled_at
+
+`prediction_results` powers both the long-run calibration chart and the week-by-week
+Weekly Check tab. Same data, two views: accuracy over time, and a scoreboard of
+prediction versus reality for one week.
+
+Future (not built in v1)
+- `users`: id, email, created_at. Nothing references it yet, so adding accounts later
+  is additive.
 
 ---
 
-## Cross-cutting practices (apply from Phase 1 onward, not deferred)
+## Cross-cutting practices (from Phase 1 onward)
 
-**Secrets/config (`.env`)** — set up in step 1, before any API key exists to leak:
-- `.env` holds DB connection string, Odds API key, etc. — never committed
-- `.env.example` committed instead, listing required variable names with placeholder values
-- `.gitignore` includes `.env` from the very first commit
+Secrets and config (`.env`)
+- `.env` holds the database connection string and any future keys. Never committed.
+- `.env.example` is committed with placeholder values.
+- `.gitignore` includes `.env`, `CLAUDE.md`, `data/inbox/`, `data/extracted/` from the
+  first commit.
 
-**Tests** — written alongside each piece of logic, not retrofitted in Phase 7:
-- pytest for backend: one test file per module as it's built (e.g. `test_team_stats_aggregation.py` lands in the same step as the aggregation script itself)
-- Model modules get correctness tests (does the aggregation math produce expected output on a known small input) separately from prediction-quality metrics (hit rate/calibration, which is a different thing — a test checks the code is correct, calibration checks the model is good)
-- Frontend: component tests for the Weekly Check tab and Value Board, since those are the highest-value UI to keep working
+Tests, written with each piece of logic
+- pytest for the backend, one test file per module in the same step as the module.
+- The CSV importer gets the heaviest tests: sidecar required, team name mapping, row
+  count checks, range checks, duplicate handling, upsert behavior, `as_of_week` rules,
+  and the stale-source and source-disagreement flags.
+- Correctness tests (is the code right) are separate from hit-rate and calibration
+  (is the model good).
+- Frontend component tests for the Weekly Check tab, Data Checklist tab, and Value Board.
 
-**Structured logging for model runs and betting results** — every model module logs, from the moment it exists:
-- Every prediction run logs: model type, model version, timestamp, number of predictions made, any rows skipped/failed and why
-- Every backtest/results-check run logs: hit rate for that run, confidence bucket breakdown, comparison to the previous run's hit rate (so you can see if a model version change made things better or worse)
-- Logged as structured JSON lines (not raw print statements) to a file per model type, so this is queryable later, not just readable — this log is itself a lightweight audit trail of "how has each model performed over time," separate from the `prediction_results` table in Postgres (the table is the queryable source of truth the frontend reads; the log is the operational record of each run happening)
+Structured logging for imports and model runs
+- Every import logs: table_key, source, as_of_week, rows read, rows loaded, rows
+  rejected and why.
+- Every prediction run logs: model type, version, snapshot week used, predictions made.
+- Every settle run logs: hit rate for the run, confidence bucket breakdown, change
+  from the previous run.
+- JSON lines, one file per model type. The log is the record of runs; the Postgres
+  tables are what the frontend reads.
 
 ---
 
 ## Step-by-Step Build Plan (one git commit per step)
 
-### Phase 1 — Foundation
-1. Repo scaffold: `/frontend`, `/backend`, `/data` (ingestion + models), root README, `.gitignore` (including `.env`)
-2. `.env.example` + `.env` setup, config loading in the backend (e.g. `pydantic-settings`)
-3. Docker Compose: Postgres + FastAPI skeleton + React skeleton, all `docker-compose up`-able
-4. FastAPI init: health-check endpoint (checks real DB connectivity), SQLAlchemy connection to Postgres, first pytest test for the health endpoint
-5. Alembic baseline migration: `teams`, `players`, `games` tables + seed script
-6. React scaffold: Vite + Tailwind, single page hitting the health-check endpoint
+### Phase 1: Foundation
+1. Repo scaffold: `/frontend`, `/backend`, `/data`, root README, `.gitignore`
+   (including `.env`, `CLAUDE.md`, `data/inbox/`, `data/extracted/`)
+2. `.env.example` and `.env` setup, config loading in the backend (`pydantic-settings`)
+3. Docker Compose: Postgres, FastAPI skeleton, React skeleton, all started by `docker-compose up`
+4. FastAPI init: health endpoint that checks real database connectivity, SQLAlchemy
+   connection, first pytest test
+5. Alembic baseline migration: `teams`, `players`, `games`, plus 32-team seed script
+6. React scaffold: Vite and Tailwind, one page calling the health endpoint
 
-### Phase 2 — Team-level data pipeline (game outcome model)
-7. Ingestion script: pull one completed season of team-level data via nfl_data_py, save raw to disk; structured logging on run start/end, rows pulled, failures
-8. Aggregation script: raw play-by-play → `team_offense_stats` / `team_defense_stats`, written to Postgres; pytest tests against a small known input to verify the math
-9. Alembic migration for stats tables (with `source` column)
-10. Manual import tooling: reusable CSV template + import script for blitz rate, coverage, run-stuff, YBC; tests for the CSV parsing/validation logic
-11. Backend endpoints: `/teams/{id}/offense`, `/teams/{id}/defense`, filterable by season/week; pytest tests for each endpoint
-12. Strength of schedule calc script, backfilled into `strength_of_schedule`; test on known small dataset
+### Phase 2: Import pipeline
+7. Folder layout under `data/`, a header-only CSV template and sidecar template for
+   every `table_key` in the catalog, and `data/README.md` describing both paths, the
+   weekly routine, and the transcription rules
+8. Alembic migration: `data_snapshots`, `team_offense_stats`, `team_defense_stats`
+9. Import script: reads one CSV plus its sidecar, maps team names, validates row count
+   and ranges, flags stale or disagreeing sources, upserts by team + season +
+   `as_of_week`, writes a `data_snapshots` row, logs the run; pytest with small fixture CSVs
+10. Transcribe and import the Week 6 screenshot set (through Week 5) into CSVs;
+    George spot-checks three rows per table before the import runs
+11. Backend endpoints: `/teams/{id}/offense`, `/teams/{id}/defense`, filterable by season and as-of week; tests
+12. Schedule, results, and box scores: migration for `game_team_stats` and
+    `game_scoring_plays` plus `games.status`; importer for weekly_matchups,
+    game_results, advanced_box_score, and scoring_plays from chat-pulled CSVs; ties
+    stored as ties; tests
+13. Data checklist endpoint: `/data/checklist?season=&week=` returns each catalog
+    table as loaded, missing, or optional for that week
+14. Frontend "Data Checklist" tab: shows what is loaded and what is still missing for the week
 
-### Phase 3 — Game outcome model + validation
-13. Model module v1: regression/XGBoost on team stats → predicted spread/win prob, written to `model_predictions`; every run logs model_version, inputs used, predictions made
-14. Backtest script: run model against a full completed season, populate `prediction_results`; logs overall hit rate and confidence-bucket breakdown on every run
-15. Hit-rate/calibration endpoint: `/models/game/calibration` — predicted vs. actual by confidence bucket; pytest tests
-16. Frontend: team stats table + calibration chart
-17. Weekly results-check endpoint: `/models/game/weekly-results?week=&season=` — for a given week, returns each game's prediction alongside the actual final score/outcome once available, plus a hit/miss flag
-18. Frontend "Weekly Check" tab: lists every game from the selected week side by side — predicted spread/winner vs. actual result, hit or miss clearly marked, "pending" for unplayed games
+### Phase 3: Game outcome model and forward validation
+15. Baseline model v0: predicted margin and win probability from the matchup (offense
+    metrics against opposing defense metrics, pace, PROE), hand-set weights documented
+    in code; writes locked rows to `model_predictions`; run logging
+16. Game lines import: spreads and totals from chat-pulled CSVs, moneylines and closing
+    lines from sportsbook screenshots; source recorded on every row; tests
+17. Settle script: after scores import, mark each locked prediction hit, miss, or push
+    and fill `prediction_results`; logs hit rate and bucket breakdown
+18. Hit-rate and calibration endpoint: `/models/game/calibration`; tests
+19. Frontend: team stats table, and a hit-rate and calibration chart with a clear
+    "small sample" note until enough games settle
+20. Weekly results endpoint: `/models/game/weekly-results?week=&season=` returns each
+    game's prediction beside the actual result, with outcome
+21. Frontend "Weekly Check" tab: every game of the selected week, predicted spread and
+    winner against the actual result, outcome marked, "pending" for unplayed games
+22. Edge endpoint: `/games/{id}/edge` compares model probability with the line's
+    implied probability; tests
+23. Frontend "Value Board": ranked games by model-versus-market edge
+24. Learned model v1: once 50 or more games are settled with valid snapshots, train a
+    regression or XGBoost model, run it beside v0, compare weekly on unseen games
 
-### Phase 4 — Odds integration + edge calculation
-19. Odds poller: pull game odds from The Odds API into `odds_snapshots`; logs each poll (games fetched, API errors, rate-limit status)
-20. Edge endpoint: `/games/{id}/edge` — implied probability from odds vs. model probability; tests
-21. Frontend "Value Board": ranked games by model-vs-market edge
+### Phase 4: Player props
+25. Player CSV templates and migration for `player_weekly_stats` and `player_prop_lines`
+26. Player usage import from league-wide screenshots (snap share, targets, carries);
+    pick about 40 tracked players per week by usage; logging and tests
+27. Prop lines and anytime-TD odds import (four markets, tracked players only); tests
+28. Baseline prop model v0 (usage-weighted rolling average adjusted by opponent positional YPT); run logging
+29. Settle props: yardage from weekly stat leader screenshots into `player_weekly_stats`,
+    TDs from `game_scoring_plays`; pushes handled; hit-rate tracking, same pattern as Phase 3
+30. Frontend: player prop comparison view
+31. Extend the Weekly Check tab to props (predicted against actual stat line, outcome, filter by prop type)
+32. (Optional) Odds API check: confirm the free plan includes the markets needed and
+    the credit cost; if yes, add a script that writes the same CSV and sidecar format,
+    with the key in `.env`
 
-### Phase 5 — Player props
-22. Ingestion: player-level weekly stats via nfl_data_py into `player_weekly_stats`; logging + tests as with team-level ingestion
-23. Manual import tooling extended for target share / red zone touches not covered by free data
-24. Prop model module: regression per prop type (rec yards, rush yards, receptions) → `player_predictions`; run logging same pattern as game model
-25. Player prop odds ingestion via The Odds API → `player_prop_odds`
-26. Backtest + hit-rate tracking for prop model, same pattern as Phase 3, same logging
-27. Frontend: player prop comparison view
-28. Extend the Weekly Check tab to include player props (predicted vs. actual stat line, hit/miss) alongside game results, filterable by prop type
+### Phase 5: Anytime TD model
+33. Red zone import: player red zone usage from the per-team pages as chat-pulled CSVs
+    (32 teams), plus team red zone rates derived from box scores where possible
+34. Baseline TD model v0 (logistic or Poisson on red zone usage and opponent TD rate allowed); run logging
+35. Settle the TD model from `game_scoring_plays`; hit-rate tracking
+36. Frontend: TD probability leaderboard
+37. Extend the Weekly Check tab to anytime-TD picks (did the player score, yes or no)
 
-### Phase 6 — Anytime TD model
-29. Feature engineering: red zone share, goal-line touches, opponent TD rate allowed
-30. TD model module: logistic/Poisson approach → probability per player per game; run logging same pattern
-31. Backtest + hit-rate tracking for TD model, same logging
-32. Frontend: TD probability leaderboard
-33. Extend the Weekly Check tab to include anytime-TD predictions (did the player score, yes/no) for the selected week
-
-### Phase 7 — Polish, CI/CD, deployment
-34. GitHub Actions: run the full pytest suite on every PR
-35. Deploy to Render/Railway: Postgres + backend + frontend live; confirm `.env` values are set via the host's secret manager, never committed
-36. README + architecture doc, with hit-rate results for each model type front and center
-37. (Optional, later) Auth: `users` table, saved predictions per user — only when actually opening this to other people
+### Phase 6: Polish, CI/CD, deployment
+38. GitHub Actions: run the full pytest suite on every PR
+39. Demo mode: seed synthetic sample data so a public deployment and README screenshots never show third-party numbers
+40. Deploy to Render or Railway: Postgres, backend, frontend live; secrets set in the host's secret manager
+41. README and architecture doc, with the current hit rate for each model type near the top
+42. (Optional, later) Auth: `users` table and saved picks, only when opening this to other people
 
 ---
 
 ## Interview Talking Points
 
-- Why three separate model types instead of one blended score (they're genuinely different prediction problems — regression, regression-with-comparison, classification)
-- Why you backtested before ever touching live odds
-- Why the schema keeps predictions user-agnostic (designed for multi-user from day one, without building auth prematurely)
-- A specific calibration result: "my game model's 70%-confidence picks hit X% of the time" — this is the single most credible thing you can say about it
-- Why manual data import is a first-class, reusable part of the pipeline, not a one-off hack
-- Why tests were written alongside each module instead of bolted on at the end — and the distinction between a correctness test (is the code right) and a calibration check (is the model good), which are different questions
-- Why every model run logs structured data (version, inputs, hit rate) as its own audit trail, separate from the Postgres results table — one is the queryable source of truth, the other is the operational record of runs happening over time
+- Why the data enters through one importer from two paths: no free key-based API covered the charted stats, and some sources' terms ruled out scraping. Every CSV carries a sidecar with source and capture time, and the importer flags stale or disagreeing sources.
+- A real example of why validation matters: one odds page showed two different totals for the same game, and a red zone page lagged by two weeks.
+- Why `as_of_week` exists: a prediction may only see data that existed before the games it predicts. Leakage is the most common way sports models look better than they are.
+- Why validation is forward-only, and why models start as baselines and get trained once 50 settled games exist.
+- Why three separate model types instead of one blended score (regression, regression against a posted line, classification).
+- A specific hit-rate or calibration result once weeks have accumulated, with the sample size stated.
+- Why predictions are locked and timestamped before kickoff, and why pushes and ties are settled explicitly.
+- Why tests were written with each module, and the difference between a correctness test and a calibration check.
+- Why every import and model run writes a structured log, separate from the Postgres tables.
+- Why the schema keeps predictions user-agnostic, so auth can be added later without a rewrite.
+- Why the public demo runs on synthetic data.

@@ -25,6 +25,10 @@ frontend/dist/
 frontend/build/
 npm-debug.log*
 
+# Screenshots and extracted CSVs — source terms keep these private (spec step 1)
+data/inbox/
+data/extracted/
+
 # Data artifacts (raw pulls, model files, run logs) — regenerated, not versioned
 data/raw/
 data/processed/
