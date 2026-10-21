@@ -61,6 +61,14 @@ class Game(Base):
     __table_args__ = (
         CheckConstraint("home_team_id <> away_team_id", name="distinct_teams"),
         CheckConstraint("week >= 1", name="week_positive"),
+        CheckConstraint("status IN ('scheduled', 'final')", name="status_valid"),
+        CheckConstraint(
+            "home_score >= 0 AND away_score >= 0", name="scores_nonnegative"
+        ),
+        CheckConstraint(
+            "status <> 'final' OR (home_score IS NOT NULL AND away_score IS NOT NULL)",
+            name="final_has_scores",
+        ),
         UniqueConstraint(
             "season", "week", "home_team_id", name="uq_games_season_week_home_team"
         ),
@@ -72,7 +80,14 @@ class Game(Base):
     week: Mapped[int]
     home_team_id: Mapped[int] = mapped_column(ForeignKey("teams.id"))
     away_team_id: Mapped[int] = mapped_column(ForeignKey("teams.id"))
-    kickoff_time: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # Nullable so a final result can be loaded even if the schedule never was.
+    kickoff_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(
+        String(9), default="scheduled", server_default="scheduled"
+    )
+    # Only final scores are kept from a game; a tie is a final with equal scores.
+    home_score: Mapped[int | None]
+    away_score: Mapped[int | None]
 
 
 class DataSnapshot(Base):

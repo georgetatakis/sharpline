@@ -204,7 +204,7 @@ def test_file_outside_season_week_folders_is_refused(session, tmp_path):
 
 
 def test_table_without_an_importer_yet_is_refused(session, tmp_path):
-    path = write_table(tmp_path, "weekly_matchups", ["week", "away_team", "home_team", "kickoff_time"], [])
+    path = write_table(tmp_path, "player_results", ["week", "player", "team", "position", "receiving_yards", "rushing_yards", "receptions"], [])
 
     result = run(session, path, tmp_path)
 

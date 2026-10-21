@@ -9,6 +9,10 @@ paths. There are no scrapers, no scheduled fetching, and no API keys.
 
 Both paths produce the same CSV format and go through the same validation.
 
+Everything here is pregame data, plus final results after the games: final scores, each
+tracked player's final line, and the closing lines used to grade bets. No box scores,
+scoring plays, or in-game data are kept.
+
 ## Folder layout
 
 ```
@@ -87,9 +91,7 @@ results next to this week's lines.
 | proe_matchups | A | offense vs defense pairing | Target week only |
 | proe_offense_defense | A | team | Optional |
 | weekly_matchups | B | game | |
-| game_results | B | game | Ties are stored as ties |
-| advanced_box_score | B | team per game | |
-| scoring_plays | B | scoring play | |
+| game_results | B | game | Final scores only. Ties are stored as ties |
 | game_lines_spread_total | B | game | Public odds page |
 | game_lines_moneyline | A | game | Sportsbook only |
 | game_lines_closing | A | game | Per-row `captured_at`, since each game closes at a different time |
@@ -97,10 +99,18 @@ results next to this week's lines.
 | anytime_td_odds | A | player | |
 | player_usage | A | player | |
 | player_red_zone | B | player | One page per team |
-| player_results | A | player | Weekly stat leaders |
+| team_red_zone | B | team | Optional, from the red zone pages |
+| player_results | A | player | Weekly stat leaders and TD scorers; settles props and anytime-TD picks |
 | injuries | A | player | Optional |
 
-`team_red_zone` is derived from box scores, so it has no template.
+Schedule and results rules:
+
+- A game is identified by season, `week`, away team, and home team. A results row with
+  home and away swapped against the stored schedule is rejected, not guessed.
+- A results file can only hold games up to its sidecar's `as_of_week`, so a final score
+  never sits in a snapshot that predicts that same week.
+- Re-importing a schedule updates kickoff times (flexed games). Re-importing a result with
+  a different score is flagged.
 
 ## Transcription rules (Path A)
 
@@ -124,19 +134,21 @@ results next to this week's lines.
   sources for the same game.
 - Moneyline prices come from sportsbook screenshots only.
 - Standings feeds that drop ties are not a source of record.
-- A feed's per-quarter scoring split is not trusted. Final scores and scoring plays are.
+- Only final scores are kept from a feed. Per-quarter splits, box scores, and
+  play-by-play are not used.
 
 ## Weekly routine
 
 1. After Monday Night Football, screenshot the team-stat tables (about 12) into
    `inbox/season-2026/week-NN/`, one file per table, named by `table_key`.
-2. In a Claude chat, ask for the week's schedule, scores and box stats for finished
-   games, scoring plays, spreads and totals, and the red zone pages. Save each CSV and
+2. In a Claude chat, ask for the week's schedule, final scores for finished games,
+   spreads and totals, and the red zone pages. Save each CSV and
    sidecar into `extracted/season-2026/week-NN/`.
 3. Screenshot sportsbook moneylines and four prop markets (receiving yards,
    receptions, rushing yards, anytime TD) for tracked players.
 4. After the games, screenshot the weekly stat leader pages (receiving yards, rushing
-   yards, receptions) to settle yardage props. Scoring plays settle anytime-TD picks.
+   yards, receptions) and the TD scorers list to settle yardage props and anytime-TD
+   picks.
 5. Ask Claude Code to transcribe the screenshots and import everything. The Data
    Checklist tab shows what is still missing.
 

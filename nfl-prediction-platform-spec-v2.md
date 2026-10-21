@@ -7,6 +7,12 @@ software engineering interviews as a full-stack, self-directed build. Framed pub
 as a predictive analytics platform with a market-comparison feature, covering game
 outcomes, player props, and anytime-TD probability.
 
+Scope: pregame only. Predictions are made and locked before kickoff from season-to-date
+stats and the posted lines. Nothing is tracked during a game. After games, only three
+kinds of final results come in: final scores (ties are ties), each tracked player's
+final line (receiving yards, rushing yards, receptions, TDs), and the bet results
+(closing lines and whether each spread, total, moneyline, and prop hit or pushed).
+
 Data approach: the app has no scrapers, no scheduled fetching, and no API keys. Every
 number reaches Postgres through one importer, from one of two paths. Path A is a
 screenshot that George captures and Claude Code transcribes to CSV. Path B is a CSV
@@ -95,7 +101,8 @@ CSV that has no sidecar.
   percentages, not prices.
 - Ties are real results. A 27-27 game is stored as a tie, and standings feeds that drop
   ties are not used as a source of record.
-- A feed's per-quarter scoring split is not trusted. Final scores and scoring plays are.
+- Only final scores are kept from a feed. Per-quarter splits, box scores, and play-by-play
+  are not used.
 
 ### Snapshot semantics (this prevents leaking the future into a prediction)
 
@@ -110,13 +117,14 @@ edited in place.
 
 1. After Monday Night Football, capture the team-stat screenshots (about 12) into
    `data/inbox/season-2026/week-NN/`, one file per table, named with the `table_key`.
-2. In a Claude chat, ask for the week's schedule, scores and box stats for finished
-   games, scoring plays, spreads and totals, and the red zone pages. Save each CSV and
+2. In a Claude chat, ask for the week's schedule, final scores for finished games,
+   spreads and totals, and the red zone pages. Save each CSV and
    sidecar it writes into `data/extracted/season-2026/week-NN/`.
 3. Screenshot sportsbook moneylines and four prop markets (receiving yards, receptions,
    rushing yards, anytime TD) for tracked players.
 4. After the games, screenshot the weekly stat leader pages (receiving yards, rushing
-   yards, receptions) to settle yardage props. Scoring plays settle anytime-TD picks.
+   yards, receptions) and the TD scorers list to settle yardage props and anytime-TD
+   picks.
 5. Ask Claude Code to transcribe the screenshots and import everything. The Data
    Checklist tab shows what is still missing.
 
@@ -167,14 +175,12 @@ so they add nothing.
 | proe_matchups | Offense PROE, defense PROE, matchup score, for the target week | A | Have (Week 6) |
 | proe_offense_defense | Season-to-date PROE for all 32 teams (Offense and Defense tabs) | A | Optional |
 
-### Schedule, results, box scores
+### Schedule and final scores
 
 | table_key | Columns | Path | Status |
 |---|---|---|---|
 | weekly_matchups | Teams, home/away, kickoff for the target week | B (sports feed) | Chat-pulled |
 | game_results | Final score per game, including ties | B (sports feed) | Chat-pulled |
-| advanced_box_score | Team box stats per game: plays, yards, time of possession, rush and pass splits, red zone attempts and targets, air yards, blitzes faced, pocket time, penalties, turnovers | B (sports feed) | Chat-pulled |
-| scoring_plays | Every scoring play with period, clock, scorer name | B (sports feed) | Chat-pulled |
 
 ### Betting data
 
@@ -192,12 +198,12 @@ so they add nothing.
 |---|---|---|---|
 | player_usage | Snap share, targets, target share, air yards, carries, rushing and receiving yards, TDs | A (league-wide pages) | Missing |
 | player_red_zone | Red zone targets, rushes, and receptions per player, by week | B (one page per team) | Chat-pulled (tested for one team) |
-| player_results | Weekly receiving yards, rushing yards, receptions for tracked players | A (weekly stat leaders) | Missing |
-| team_red_zone | Red zone TD rate, offense and allowed | derive from box scores | Optional |
+| player_results | Weekly receiving yards, rushing yards, receptions, TDs for tracked players | A (weekly stat leaders, TD scorers) | Missing |
+| team_red_zone | Red zone TD rate, offense and allowed | B (red zone pages) | Optional |
 | injuries | Out, doubtful, and questionable players for the week | A | Optional |
 
 Minimum to get the game model running: everything marked Have, plus
-offensive_pace_tempo, weekly_matchups, advanced_box_score, and game_lines. Player and TD
+offensive_pace_tempo, weekly_matchups, game_results, and game_lines. Player and TD
 tables are only needed once Phase 4 starts.
 
 ---
@@ -300,21 +306,15 @@ its own columns by upsert)
   ypt_allowed_wr, ypt_allowed_te, ypt_allowed_rb, ypt_allowed_outside,
   ypt_allowed_slot, def_proe, rz_td_rate_allowed
 
-Game data (from the sports feed)
-- `game_team_stats`: game_id, team_id, plays, total_yards, time_of_possession,
-  rush_attempts, rush_yards, pass_attempts, pass_completions, pass_yards, air_yards,
-  sacks_taken, turnovers, penalties, penalty_yards, redzone_rush_attempts,
-  redzone_targets, blitzes_faced, avg_pocket_time
-- `game_scoring_plays`: game_id, period, clock, description, scoring_team_id,
-  scorer_name, scorer_player_id (nullable), play_type (td_pass, td_rush, fg, xp,
-  two_point, other)
-
 Betting data
 - `game_lines`: game_id, line_type (open, current, closing), spread_home, moneyline_home,
   moneyline_away, total, captured_at, source_name, book_label. Moneyline columns are
   nullable, because spread and total can arrive from a different source than prices.
 - `player_prop_lines`: player_id, game_id, prop_type, line, over_price, under_price,
   captured_at, book_label
+- `line_results`: game_line_id or player_prop_line_id, market (spread, total, moneyline,
+  prop), outcome (home_cover, away_cover, over, under, home_win, away_win, push),
+  settled_at. Worked out from final scores and player finals, never from in-game data.
 
 Player data
 - `player_weekly_stats`: player_id, season, week, snaps, snap_share, targets,
@@ -390,10 +390,9 @@ Structured logging for imports and model runs
 10. Transcribe and import the Week 6 screenshot set (through Week 5) into CSVs;
     George spot-checks three rows per table before the import runs
 11. Backend endpoints: `/teams/{id}/offense`, `/teams/{id}/defense`, filterable by season and as-of week; tests
-12. Schedule, results, and box scores: migration for `game_team_stats` and
-    `game_scoring_plays` plus `games.status`; importer for weekly_matchups,
-    game_results, advanced_box_score, and scoring_plays from chat-pulled CSVs; ties
-    stored as ties; tests
+12. Schedule and final scores: migration adding `games.status` and final scores
+    (kickoff nullable); importer for weekly_matchups and game_results from chat-pulled
+    CSVs; ties stored as ties; tests
 13. Data checklist endpoint: `/data/checklist?season=&week=` returns each catalog
     table as loaded, missing, or optional for that week
 14. Frontend "Data Checklist" tab: shows what is loaded and what is still missing for the week
@@ -403,9 +402,11 @@ Structured logging for imports and model runs
     metrics against opposing defense metrics, pace, PROE), hand-set weights documented
     in code; writes locked rows to `model_predictions`; run logging
 16. Game lines import: spreads and totals from chat-pulled CSVs, moneylines and closing
-    lines from sportsbook screenshots; source recorded on every row; tests
-17. Settle script: after scores import, mark each locked prediction hit, miss, or push
-    and fill `prediction_results`; logs hit rate and bucket breakdown
+    lines (captured shortly before kickoff) from sportsbook screenshots; source recorded
+    on every row; tests
+17. Settle script: after final scores import, mark each locked prediction hit, miss, or
+    push and fill `prediction_results`, and record each game line's bet result (cover,
+    over/under, moneyline, push) in `line_results`; logs hit rate and bucket breakdown
 18. Hit-rate and calibration endpoint: `/models/game/calibration`; tests
 19. Frontend: team stats table, and a hit-rate and calibration chart with a clear
     "small sample" note until enough games settle
@@ -426,7 +427,8 @@ Structured logging for imports and model runs
 27. Prop lines and anytime-TD odds import (four markets, tracked players only); tests
 28. Baseline prop model v0 (usage-weighted rolling average adjusted by opponent positional YPT); run logging
 29. Settle props: yardage from weekly stat leader screenshots into `player_weekly_stats`,
-    TDs from `game_scoring_plays`; pushes handled; hit-rate tracking, same pattern as Phase 3
+    TDs from `player_results`; prop bet results into `line_results`; pushes handled;
+    hit-rate tracking, same pattern as Phase 3
 30. Frontend: player prop comparison view
 31. Extend the Weekly Check tab to props (predicted against actual stat line, outcome, filter by prop type)
 32. (Optional) Odds API check: confirm the free plan includes the markets needed and
@@ -435,9 +437,9 @@ Structured logging for imports and model runs
 
 ### Phase 5: Anytime TD model
 33. Red zone import: player red zone usage from the per-team pages as chat-pulled CSVs
-    (32 teams), plus team red zone rates derived from box scores where possible
+    (32 teams), plus team red zone rates from the same pages where available
 34. Baseline TD model v0 (logistic or Poisson on red zone usage and opponent TD rate allowed); run logging
-35. Settle the TD model from `game_scoring_plays`; hit-rate tracking
+35. Settle the TD model from `player_results` TDs; hit-rate tracking
 36. Frontend: TD probability leaderboard
 37. Extend the Weekly Check tab to anytime-TD picks (did the player score, yes or no)
 

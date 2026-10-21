@@ -462,11 +462,19 @@ def import_csv(session: Session, csv_path: Path, log_dir: Path | None = None) ->
         try:
             season, folder_week = folder_weeks(csv_path)
             sidecar = read_sidecar(csv_path, folder_week)
-            spec = TABLES.get(table_key)
-            if spec is None:
+            # Imported here because game_importer builds on this module's helpers.
+            from app.game_importer import GAME_TABLES
+
+            if table_key in TABLES:
+                spec = TABLES[table_key]
+                rows = read_rows(csv_path, spec)
+                result = _load(session, csv_path, table_key, spec, rows, season, sidecar)
+            elif table_key in GAME_TABLES:
+                spec = GAME_TABLES[table_key]
+                rows = read_rows(csv_path, spec)
+                result = spec.load(session, csv_path, table_key, rows, season, sidecar)
+            else:
                 raise ImportRejected(f"no importer for table_key {table_key!r} yet")
-            rows = read_rows(csv_path, spec)
-            result = _load(session, csv_path, table_key, spec, rows, season, sidecar)
         except ImportRejected as exc:
             session.rollback()
             result = ImportResult(
