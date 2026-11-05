@@ -329,8 +329,9 @@ Core entities
 - `teams`: id, name, nickname, abbreviation, conference, division
 - `players`: id, name, team_id, position, nflverse_id
 - `games`: id, season, week, home_team_id, away_team_id, kickoff_time, status
-  (scheduled, final), home_score, away_score, home_qb_out, away_qb_out (manual flags),
-  roof, temp, wind. Ties are stored as ties.
+  (scheduled, final), home_score, away_score, nflverse_game_id, game_type (REG, WC,
+  DIV, CON, SB), neutral_site, home_qb_out, away_qb_out (manual flags), roof, temp,
+  wind. Ties are stored as ties.
 
 Import tracking
 - `data_snapshots`: id, season, as_of_week, target_week, table_key, source_name,
@@ -361,14 +362,18 @@ Game data (nflverse, or the sports feed as fallback)
   rush_attempts, rush_yards, pass_attempts, pass_completions, pass_yards, air_yards,
   sacks_taken, turnovers, penalties, penalty_yards, redzone_rush_attempts,
   redzone_targets, blitzes_faced, avg_pocket_time
-- `game_scoring_plays`: game_id, period, clock, description, scoring_team_id,
-  scorer_name, scorer_player_id (nullable), play_type (td_pass, td_rush, fg, xp,
-  two_point, other)
+- `game_scoring_plays`: game_id, nflverse_play_id, period, clock, description,
+  scoring_team_id, points, scorer_name, scorer_nflverse_id, scorer_player_id
+  (nullable), play_type (td_pass, td_rush, td_other for return and recovery TDs, fg,
+  xp, two_point, other for safeties and defensive conversions)
 
 Betting data
-- `game_lines`: game_id, line_type (open, current, closing), spread_home, moneyline_home,
-  moneyline_away, total, captured_at, source_name, book_label. Raw prices only, no
-  de-vigged values stored. Moneyline columns are nullable.
+- `game_lines`: game_id, line_type (open, current, closing), spread_home,
+  spread_price_home, spread_price_away, total, over_price, under_price,
+  moneyline_home, moneyline_away, captured_at, source_name, book_label. Raw prices
+  only, no de-vigged values stored. Price columns are nullable. spread_home is printed
+  the sportsbook way (-3.5 = home favored); nflverse's spread_line is the opposite
+  sign. A closing line's captured_at is kickoff.
 - `player_prop_lines`: player_id, game_id, prop_type, line, over_price, under_price,
   captured_at, book_label
 

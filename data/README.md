@@ -1,17 +1,23 @@
 # Data
 
-Every number in the app reaches Postgres through one import script, from one of two
+Every number in the app reaches Postgres through one import layer, from one of three
 paths. There are no scrapers, no scheduled fetching, and no API keys.
 
+- **Path C (nflverse, first choice):** George downloads nflverse files with nflreadr in R
+  and saves them under `extracted/nflverse/`. Used for anything nflverse provides.
 - **Path A (screenshot):** George captures a screenshot, Claude Code transcribes it to CSV.
+  Used only for what nflverse lacks (prop lines, anytime-TD prices, live moneylines,
+  slot and outside yards per target, play clock stats, gear change).
 - **Path B (chat-pulled CSV):** In a separate Claude chat, George asks for one public
   page or sports feed at a time; the chat writes a CSV and sidecar, and George saves them.
+  A fallback for the live week's schedule, scores, spreads and totals.
 
-Both paths produce the same CSV format and go through the same validation.
+Every file has a sidecar and goes through the same validation. A stat is not read from
+two sources interchangeably until the overlap test (spec step 14) shows they match.
 
-Everything here is pregame data, plus final results after the games: final scores, each
-tracked player's final line, and the closing lines used to grade bets. No box scores,
-scoring plays, or in-game data are kept.
+The models predict before kickoff. After the games, nflverse supplies the results that
+grade them: final scores, closing lines, scoring plays and player stat lines. No live
+in-game data is kept.
 
 ## Folder layout
 
@@ -23,11 +29,18 @@ data/
     season-2026/
       week-06/
         team_offense_metrics.png
-  extracted/             CSVs + sidecars, from either path (gitignored)
+  extracted/             files + sidecars from every path (gitignored)
     season-2026/
       week-06/
         team_offense_metrics.csv
         team_offense_metrics.meta.json
+    nflverse/              Path C
+      DOWNLOAD_INFO.txt    when and with which nflreadr version George downloaded
+      schedules/
+        2026/
+          schedules.csv.gz
+          schedules.meta.json
+      play_by_play/2026/...
 ```
 
 - Files are named by `table_key`. A table split across several screenshots gets a
@@ -64,6 +77,51 @@ A model reads only snapshots whose `as_of_week` is strictly before the week it
 predicts. Rows are keyed by team + season + `as_of_week` and never edited in place, so
 last week's numbers survive when this week's arrive.
 
+## nflverse files (Path C)
+
+George downloads with nflreadr in R, one season per file, into
+`extracted/nflverse/<dataset>/<season>/<dataset>.csv.gz`, and records each download in
+`DOWNLOAD_INFO.txt`. Claude Code never downloads them.
+
+Sidecars for these files come from `DOWNLOAD_INFO.txt`, not from memory:
+
+```
+python -m app.nflverse_loader sidecars data/extracted/nflverse
+```
+
+This writes `<dataset>.meta.json` next to each file that lacks one and never overwrites
+one. `source_name` names the dataset and nflreadr version; `source_url` is the nflreadr
+call, e.g. `nflreadr::load_schedules(2026)`. `as_of_week` is the last week the file
+covers in full: a Thursday final doesn't count until the rest of that week is played.
+A download time written without an offset is read as US Eastern.
+
+```
+python -m app.nflverse_loader load data/extracted/nflverse            (every season)
+python -m app.nflverse_loader load data/extracted/nflverse --season 2026
+```
+
+| Dataset | Loads into | Notes |
+|---|---|---|
+| schedules | `games`, `game_lines` | Final scores (ties kept), game type, neutral site, roof, temp, wind. A played game's line is stored as `closing`, captured at kickoff; an upcoming game's line as `current`, captured at the download time |
+| play_by_play | `game_scoring_plays` | Touchdowns (pass, rush, other), field goals, extra points, two-point conversions, safeties, with the scorer |
+
+Loader rules:
+
+- Schedules load before play-by-play, because scoring plays attach to games.
+- Prices are raw American odds. `spread_home` is the home spread as a sportsbook prints
+  it (-3.5 = home favored); nflverse's `spread_line` has the opposite sign.
+- A final from the sidecar's target week (a Thursday game) loads, and is flagged so no
+  model predicting that week reads it. A final after the target week is rejected.
+- A game's scoring plays should add up to its final score. When they don't, the game is
+  flagged and the final score from schedules stands. In 2018–2026 that is 3 of 2,499
+  games.
+- A season with fewer regular-season games than a full schedule is flagged (2022 has 271:
+  Bills at Bengals was cancelled).
+- Older seasons use OAK for the Raiders; it maps to the current franchise.
+- Re-importing updates games and lines in place and replaces a game's scoring plays.
+- `pbp_participation`, `player_stats`, `snap_counts`, `rosters` and `injuries` load in
+  step 13.
+
 ## Templates
 
 `templates/` has a header-only `<table_key>.csv` and a blank `<table_key>.meta.json`
@@ -90,8 +148,8 @@ results next to this week's lines.
 | positional_coverage | A | team | |
 | proe_matchups | A | offense vs defense pairing | Target week only |
 | proe_offense_defense | A | team | Optional |
-| weekly_matchups | B | game | |
-| game_results | B | game | Final scores only. Ties are stored as ties |
+| weekly_matchups | B | game | Fallback for nflverse schedules |
+| game_results | B | game | Final scores only. Ties are stored as ties. Fallback for nflverse schedules |
 | game_lines_spread_total | B | game | Public odds page |
 | game_lines_moneyline | A | game | Sportsbook only |
 | game_lines_closing | A | game | Per-row `captured_at`, since each game closes at a different time |
@@ -134,26 +192,27 @@ Schedule and results rules:
   sources for the same game.
 - Moneyline prices come from sportsbook screenshots only.
 - Standings feeds that drop ties are not a source of record.
-- Only final scores are kept from a feed. Per-quarter splits, box scores, and
-  play-by-play are not used.
+- Only final scores are kept from a feed. Its per-quarter splits are not trusted;
+  scoring plays and box-score stats come from nflverse play-by-play.
 
 ## Weekly routine
 
-1. After Monday Night Football, screenshot the team-stat tables (about 12) into
-   `inbox/season-2026/week-NN/`, one file per table, named by `table_key`.
-2. In a Claude chat, ask for the week's schedule, final scores for finished games,
-   spreads and totals, and the red zone pages. Save each CSV and
-   sidecar into `extracted/season-2026/week-NN/`.
-3. Screenshot sportsbook moneylines and four prop markets (receiving yards,
-   receptions, rushing yards, anytime TD) for tracked players.
-4. After the games, screenshot the weekly stat leader pages (receiving yards, rushing
-   yards, receptions) and the TD scorers list to settle yardage props and anytime-TD
-   picks.
-5. Ask Claude Code to transcribe the screenshots and import everything. The Data
+1. After Monday Night Football, download the updated 2026 nflverse files into
+   `extracted/nflverse/`, add a line to `DOWNLOAD_INFO.txt`, delete the 2026 sidecars
+   for the files you replaced, and run `sidecars` then `load --season 2026`.
+2. Screenshot only what nflverse lacks into `inbox/season-2026/week-NN/`, one file per
+   table, named by `table_key`: sportsbook moneylines, four prop markets (receiving
+   yards, receptions, rushing yards, anytime TD) for tracked players, and any team stat
+   the overlap test kept on screenshots.
+3. If nflverse hasn't updated the schedule, scores, spreads or totals yet, pull them in a
+   Claude chat and save the CSV and sidecar into `extracted/season-2026/week-NN/`.
+4. Ask Claude Code to transcribe the screenshots and import everything. The Data
    Checklist tab shows what is still missing.
 
 ## Source terms
 
+- nflverse is open data. Check its license and attribution notes before publishing any
+  of it.
 - The charted stats come from a paid analytics site whose terms prohibit automated
   access and copying without written consent. Treat it as private until there is a
   written yes for personal, non-commercial use.

@@ -40,3 +40,8 @@ logs/
 .DS_Store
 .vscode/
 .idea/
+
+# R session files from running nflreadr in the repo folder
+.Rapp.history
+.RData
+.Rhistory

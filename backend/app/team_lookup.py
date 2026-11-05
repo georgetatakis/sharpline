@@ -21,6 +21,10 @@ ABBREVIATION_ALIASES = {
     "TBB": "TB",
     "SFO": "SF",
     "NEP": "NE",
+    # Older nflverse seasons use the franchise's previous city.
+    "OAK": "LV",
+    "SD": "LAC",
+    "STL": "LA",
 }
 
 

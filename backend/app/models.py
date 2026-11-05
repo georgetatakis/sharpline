@@ -10,6 +10,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -69,6 +70,12 @@ class Game(Base):
             "status <> 'final' OR (home_score IS NOT NULL AND away_score IS NOT NULL)",
             name="final_has_scores",
         ),
+        CheckConstraint(
+            "game_type IN ('REG', 'WC', 'DIV', 'CON', 'SB')", name="game_type_valid"
+        ),
+        CheckConstraint(
+            "roof IN ('outdoors', 'dome', 'closed', 'open')", name="roof_valid"
+        ),
         UniqueConstraint(
             "season", "week", "home_team_id", name="uq_games_season_week_home_team"
         ),
@@ -88,7 +95,85 @@ class Game(Base):
     # Only final scores are kept from a game; a tie is a final with equal scores.
     home_score: Mapped[int | None]
     away_score: Mapped[int | None]
+    # nflverse's id ("2026_06_KC_LV"); links a game to its play-by-play.
+    nflverse_game_id: Mapped[str | None] = mapped_column(String(32), unique=True)
+    # REG, or a playoff round: WC, DIV, CON, SB.
+    game_type: Mapped[str] = mapped_column(String(3), default="REG", server_default="REG")
+    neutral_site: Mapped[bool] = mapped_column(default=False, server_default=false())
+    # Manual flags set before kickoff when a team's starting QB is out.
+    home_qb_out: Mapped[bool] = mapped_column(default=False, server_default=false())
+    away_qb_out: Mapped[bool] = mapped_column(default=False, server_default=false())
+    roof: Mapped[str | None] = mapped_column(String(8))
+    # Fahrenheit and mph at kickoff; empty for domes and closed roofs.
+    temp: Mapped[float | None]
+    wind: Mapped[float | None]
 
+
+
+class GameLine(Base):
+    """One price for one game: the spread, total and moneylines a source showed.
+
+    Raw American prices only; de-vigging happens when a model reads them. spread_home
+    is the home team's spread as a sportsbook prints it, so -3.5 means home favored.
+    """
+
+    __tablename__ = "game_lines"
+    __table_args__ = (
+        CheckConstraint(
+            "line_type IN ('open', 'current', 'closing')", name="line_type_valid"
+        ),
+        UniqueConstraint(
+            "game_id", "line_type", "source_name", "captured_at", name="uq_game_lines_row"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    game_id: Mapped[int] = mapped_column(ForeignKey("games.id"))
+    line_type: Mapped[str] = mapped_column(String(8))
+    spread_home: Mapped[float | None]
+    spread_price_home: Mapped[int | None]
+    spread_price_away: Mapped[int | None]
+    total: Mapped[float | None]
+    over_price: Mapped[int | None]
+    under_price: Mapped[int | None]
+    moneyline_home: Mapped[int | None]
+    moneyline_away: Mapped[int | None]
+    # A closing line is captured at kickoff.
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    source_name: Mapped[str] = mapped_column(String(128))
+    book_label: Mapped[str | None] = mapped_column(String(64))
+
+
+class GameScoringPlay(Base):
+    """One scoring play of a final game. Settles anytime-TD picks."""
+
+    __tablename__ = "game_scoring_plays"
+    __table_args__ = (
+        CheckConstraint(
+            "play_type IN ('td_pass', 'td_rush', 'td_other', 'fg', 'xp', 'two_point', 'other')",
+            name="play_type_valid",
+        ),
+        CheckConstraint("points > 0", name="points_positive"),
+        UniqueConstraint(
+            "game_id", "nflverse_play_id", "play_type", name="uq_game_scoring_plays_row"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    game_id: Mapped[int] = mapped_column(ForeignKey("games.id"))
+    nflverse_play_id: Mapped[int]
+    period: Mapped[int]
+    # Game clock left in the period, MM:SS.
+    clock: Mapped[str | None] = mapped_column(String(5))
+    description: Mapped[str | None] = mapped_column(Text)
+    scoring_team_id: Mapped[int] = mapped_column(ForeignKey("teams.id"))
+    # td_other is a return or recovery TD; other is a safety or defensive conversion.
+    play_type: Mapped[str] = mapped_column(String(9))
+    points: Mapped[int]
+    scorer_name: Mapped[str | None] = mapped_column(String(128))
+    scorer_nflverse_id: Mapped[str | None] = mapped_column(String(16))
+    # Filled once players are loaded (step 13).
+    scorer_player_id: Mapped[int | None] = mapped_column(ForeignKey("players.id"))
 
 class DataSnapshot(Base):
     """One import of one CSV: what was loaded, from where, and for which weeks.

@@ -193,6 +193,8 @@ class ImportResult:
     flags: list[str] = field(default_factory=list)
     reason: str | None = None
     snapshot_id: int | None = None
+    # Extra tallies for loaders that fill more than one table, e.g. {"closing_lines": 285}.
+    counts: dict[str, int] = field(default_factory=dict)
 
 
 def parse_value(text: str, kind: str) -> float | None:
@@ -245,7 +247,16 @@ def folder_weeks(csv_path: Path) -> tuple[int, int]:
 
 
 def read_sidecar(csv_path: Path, folder_week: int) -> Sidecar:
-    path = csv_path.with_suffix(".meta.json")
+    sidecar = load_sidecar(csv_path.with_suffix(".meta.json"))
+    if sidecar.target_week != folder_week:
+        raise ImportRejected(
+            f"sidecar target_week is {sidecar.target_week} but the file is in week-{folder_week:02d}/"
+        )
+    return sidecar
+
+
+def load_sidecar(path: Path) -> Sidecar:
+    """Read and check one <table_key>.meta.json."""
     if not path.exists():
         raise ImportRejected(f"no sidecar: {path.name} is missing")
     try:
@@ -266,10 +277,6 @@ def read_sidecar(csv_path: Path, folder_week: int) -> Sidecar:
     if not 0 <= as_of_week < target_week:
         raise ImportRejected(
             f"sidecar as_of_week ({as_of_week}) must be before target_week ({target_week})"
-        )
-    if target_week != folder_week:
-        raise ImportRejected(
-            f"sidecar target_week is {target_week} but the file is in week-{folder_week:02d}/"
         )
     return Sidecar(
         str(raw["source_name"]), str(raw["source_url"]), captured_at, as_of_week, target_week
@@ -485,20 +492,26 @@ def import_csv(session: Session, csv_path: Path, log_dir: Path | None = None) ->
                 session.add(snapshot)
                 session.commit()
                 result.snapshot_id = snapshot.id
-        log.summary.update(
-            table_key=table_key,
-            status=result.status,
-            source=sidecar.source_name if sidecar else None,
-            season=season,
-            as_of_week=sidecar.as_of_week if sidecar else None,
-            target_week=sidecar.target_week if sidecar else None,
-            rows_read=result.rows_read,
-            rows_loaded=result.rows_loaded,
-            rows_rejected=result.rejected,
-            flags=result.flags,
-            reason=result.reason,
-        )
+        log_summary(log, result, season, sidecar)
     return result
+
+
+def log_summary(log, result: ImportResult, season: int | None, sidecar: Sidecar | None) -> None:
+    """The fields every import writes on its run_end log line."""
+    log.summary.update(
+        table_key=result.table_key,
+        status=result.status,
+        source=sidecar.source_name if sidecar else None,
+        season=season,
+        as_of_week=sidecar.as_of_week if sidecar else None,
+        target_week=sidecar.target_week if sidecar else None,
+        rows_read=result.rows_read,
+        rows_loaded=result.rows_loaded,
+        rows_rejected=result.rejected,
+        flags=result.flags,
+        reason=result.reason,
+        **({"counts": result.counts} if result.counts else {}),
+    )
 
 
 def main() -> None:
