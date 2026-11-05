@@ -55,6 +55,10 @@ class Player(Base):
     # Nullable so free agents and retired players can still be stored.
     team_id: Mapped[int | None] = mapped_column(ForeignKey("teams.id"), index=True)
     position: Mapped[str] = mapped_column(String(8))
+    # nflverse's gsis id ("00-0033873") and Pro Football Reference's id ("ButkHa00"),
+    # which snap counts use.
+    nflverse_id: Mapped[str | None] = mapped_column(String(16), unique=True)
+    pfr_id: Mapped[str | None] = mapped_column(String(16))
 
 
 class Game(Base):
@@ -109,6 +113,69 @@ class Game(Base):
     wind: Mapped[float | None]
 
 
+
+
+class GameTeamStats(Base):
+    """One team's box score for one game, built from nflverse play-by-play."""
+
+    __tablename__ = "game_team_stats"
+    __table_args__ = (UniqueConstraint("game_id", "team_id", name="uq_game_team_stats_row"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    game_id: Mapped[int] = mapped_column(ForeignKey("games.id"))
+    team_id: Mapped[int] = mapped_column(ForeignKey("teams.id"))
+    plays: Mapped[int]
+    total_yards: Mapped[int]
+    # Minutes.
+    time_of_possession: Mapped[float | None]
+    rush_attempts: Mapped[int]
+    rush_yards: Mapped[int]
+    pass_attempts: Mapped[int]
+    pass_completions: Mapped[int]
+    pass_yards: Mapped[int]
+    air_yards: Mapped[int]
+    sacks_taken: Mapped[int]
+    turnovers: Mapped[int]
+    penalties: Mapped[int]
+    penalty_yards: Mapped[int]
+    redzone_rush_attempts: Mapped[int]
+    redzone_targets: Mapped[int]
+    # Participation data; empty when that season's file isn't loaded.
+    blitzes_faced: Mapped[int | None]
+    avg_pocket_time: Mapped[float | None]
+
+
+class PlayerWeeklyStats(Base):
+    """One player's line for one week: usage and results, from nflverse."""
+
+    __tablename__ = "player_weekly_stats"
+    __table_args__ = (
+        UniqueConstraint("player_id", "season", "week", name="uq_player_weekly_stats_row"),
+        Index("ix_player_weekly_stats_season_week", "season", "week"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    player_id: Mapped[int] = mapped_column(ForeignKey("players.id"))
+    season: Mapped[int]
+    week: Mapped[int]
+    game_id: Mapped[int] = mapped_column(ForeignKey("games.id"))
+    team_id: Mapped[int] = mapped_column(ForeignKey("teams.id"))
+    # Offensive snaps; empty when the player isn't matched in snap counts.
+    snaps: Mapped[int | None]
+    snap_share: Mapped[float | None]
+    targets: Mapped[int]
+    target_share: Mapped[float | None]
+    carries: Mapped[int]
+    # Inside the opponent's 20: carries plus receptions, and targets. Goal line is inside the 5.
+    red_zone_touches: Mapped[int]
+    red_zone_targets: Mapped[int]
+    goal_line_carries: Mapped[int]
+    air_yards: Mapped[int]
+    receiving_yards: Mapped[int]
+    rushing_yards: Mapped[int]
+    receptions: Mapped[int]
+    # Touchdowns the player scored (rushing, receiving, returns); passing TDs don't count.
+    tds: Mapped[int]
 
 class GameLine(Base):
     """One price for one game: the spread, total and moneylines a source showed.
@@ -214,9 +281,10 @@ class TeamOffenseStats(Base):
     __tablename__ = "team_offense_stats"
     __table_args__ = (
         UniqueConstraint(
-            "team_id", "season", "as_of_week", name="uq_team_offense_stats_row"
+            "team_id", "season", "as_of_week", "source", name="uq_team_offense_stats_row"
         ),
         CheckConstraint("as_of_week >= 0", name="as_of_week_nonnegative"),
+        CheckConstraint("source IN ('screenshot', 'nflverse')", name="source_valid"),
         Index("ix_team_offense_stats_season_as_of_week", "season", "as_of_week"),
     )
 
@@ -224,6 +292,15 @@ class TeamOffenseStats(Base):
     team_id: Mapped[int] = mapped_column(ForeignKey("teams.id"))
     season: Mapped[int]
     as_of_week: Mapped[int]
+    # Screenshot rows come from the importer; nflverse rows are built from play-by-play.
+    # Which one a model reads is decided per stat by the overlap test (feature_sources).
+    source: Mapped[str] = mapped_column(
+        String(10), default="screenshot", server_default="screenshot"
+    )
+    # nflverse only: the sample behind the rates.
+    games_played: Mapped[int | None]
+    plays: Mapped[int | None]
+    success_rate: Mapped[float | None]
 
     # team_offense_metrics
     epa_per_play: Mapped[float | None]
@@ -273,9 +350,10 @@ class TeamDefenseStats(Base):
     __tablename__ = "team_defense_stats"
     __table_args__ = (
         UniqueConstraint(
-            "team_id", "season", "as_of_week", name="uq_team_defense_stats_row"
+            "team_id", "season", "as_of_week", "source", name="uq_team_defense_stats_row"
         ),
         CheckConstraint("as_of_week >= 0", name="as_of_week_nonnegative"),
+        CheckConstraint("source IN ('screenshot', 'nflverse')", name="source_valid"),
         Index("ix_team_defense_stats_season_as_of_week", "season", "as_of_week"),
     )
 
@@ -283,6 +361,15 @@ class TeamDefenseStats(Base):
     team_id: Mapped[int] = mapped_column(ForeignKey("teams.id"))
     season: Mapped[int]
     as_of_week: Mapped[int]
+    # Screenshot rows come from the importer; nflverse rows are built from play-by-play.
+    # Which one a model reads is decided per stat by the overlap test (feature_sources).
+    source: Mapped[str] = mapped_column(
+        String(10), default="screenshot", server_default="screenshot"
+    )
+    # nflverse only: the sample behind the rates.
+    games_played: Mapped[int | None]
+    plays: Mapped[int | None]
+    success_rate_allowed: Mapped[float | None]
 
     # team_defense_metrics
     epa_per_play_allowed: Mapped[float | None]

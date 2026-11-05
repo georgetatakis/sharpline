@@ -119,8 +119,44 @@ Loader rules:
   Bills at Bengals was cancelled).
 - Older seasons use OAK for the Raiders; it maps to the current franchise.
 - Re-importing updates games and lines in place and replaces a game's scoring plays.
-- `pbp_participation`, `player_stats`, `snap_counts`, `rosters` and `injuries` load in
-  step 13.
+- `injuries` is not loaded yet.
+
+### Built stats (step 13)
+
+After the loader, the builder turns play-by-play, participation, rosters, player stats
+and snap counts into the tables the models read:
+
+```
+python -m app.nflverse_build data/extracted/nflverse            (every season)
+python -m app.nflverse_build data/extracted/nflverse --season 2026
+```
+
+| Builds | From | Notes |
+|---|---|---|
+| `team_offense_stats`, `team_defense_stats` with `source = nflverse` | play_by_play, pbp_participation, rosters | One row per team per `as_of_week`, season to date. The row for week w uses games of weeks 1..w only |
+| `game_team_stats` | play_by_play, pbp_participation | Each team's box score per game |
+| `players`, `player_weekly_stats` | rosters, player_stats, snap_counts, play_by_play | QB, RB, WR and TE lines; red zone and goal-line usage come from play-by-play |
+
+Builder rules:
+
+- Each file needs its sidecar. Play-by-play is required; a season without a usable
+  participation file still builds, with personnel, box, pass rush, pressure, time to
+  throw and coverage left empty, and says so. 2026 participation isn't published yet.
+- Weeks after a file's `as_of_week` are left out, so a partly played week never enters a
+  season-to-date row.
+- Rates are season sums divided by season sums, never averages of weekly averages.
+- Screenshot rows are never touched. A rebuild replaces only that season's nflverse rows.
+- Definitions (the overlap test in step 14 checks them against the screenshots):
+  explosive is a designed run of 10+ or a dropback of 20+ yards; neutral is win
+  probability 20-80% outside the last two minutes of a half; down conversion is the
+  share of series that earn a first down or TD; blitz is 5+ pass rushers; light box is
+  6 or fewer, heavy 8 or more; sub package is 5+ defensive backs; middle closed is
+  Cover 1 or 3, middle open is Cover 2, 2-man, Cover 4 or 6.
+- Not built from nflverse (screenshot only): motion rate, play action rate, adjusted
+  plays, play clock stats, gear change, yards before contact, slot and outside yards
+  per target.
+- Snap counts match by Pro Football Reference id, or by name, team and game when the
+  roster lacks the id and the name is unique. Lines still unmatched are counted.
 
 ## Templates
 

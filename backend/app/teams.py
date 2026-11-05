@@ -1,5 +1,7 @@
 """Team stats endpoints: one team's offense or defense snapshots, newest first."""
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -20,14 +22,17 @@ def _team_or_404(db: Session, team_id: int) -> Team:
     return team
 
 
-def _snapshots(db: Session, team_id: int, model, season: int | None, as_of_week: int | None):
+def _snapshots(db: Session, team_id: int, model, season: int | None, as_of_week: int | None,
+               source: str | None):
     team = _team_or_404(db, team_id)
     query = select(model).where(model.team_id == team_id)
+    if source is not None:
+        query = query.where(model.source == source)
     if season is not None:
         query = query.where(model.season == season)
     if as_of_week is not None:
         query = query.where(model.as_of_week == as_of_week)
-    query = query.order_by(model.season.desc(), model.as_of_week.desc())
+    query = query.order_by(model.season.desc(), model.as_of_week.desc(), model.source)
 
     columns = [c.name for c in model.__table__.columns if c.name not in _KEY_COLUMNS]
     return {
@@ -42,10 +47,11 @@ def team_offense(
     team_id: int,
     season: int | None = Query(None, ge=2000),
     as_of_week: int | None = Query(None, ge=0, le=22),
+    source: Literal["screenshot", "nflverse"] | None = None,
     db: Session = Depends(get_db),
 ):
     """Offense stats snapshots for one team, optionally for one season and as-of week."""
-    return _snapshots(db, team_id, TeamOffenseStats, season, as_of_week)
+    return _snapshots(db, team_id, TeamOffenseStats, season, as_of_week, source)
 
 
 @router.get("/{team_id}/defense")
@@ -53,7 +59,8 @@ def team_defense(
     team_id: int,
     season: int | None = Query(None, ge=2000),
     as_of_week: int | None = Query(None, ge=0, le=22),
+    source: Literal["screenshot", "nflverse"] | None = None,
     db: Session = Depends(get_db),
 ):
     """Defense stats snapshots for one team, optionally for one season and as-of week."""
-    return _snapshots(db, team_id, TeamDefenseStats, season, as_of_week)
+    return _snapshots(db, team_id, TeamDefenseStats, season, as_of_week, source)

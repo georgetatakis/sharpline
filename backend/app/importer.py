@@ -28,6 +28,8 @@ from app.models import DataSnapshot, Team, TeamDefenseStats, TeamOffenseStats
 from app.run_log import logged_run
 from app.team_lookup import TeamLookup
 
+# Rows this importer writes to the team stats tables; nflverse-built rows sit beside them.
+SOURCE = "screenshot"
 SIDECAR_FIELDS = ("source_name", "source_url", "captured_at", "as_of_week", "target_week")
 # A source writes a dash where a cell has no value.
 EMPTY_MARKERS = {"", "-", "–", "—"}
@@ -341,7 +343,7 @@ def _stale_flags(session, spec, accepted, season, as_of_week) -> list[str]:
         columns = [n for n, c in spec.columns.items() if c.model is model]
         previous_week = session.scalar(
             select(model.as_of_week)
-            .where(model.season == season, model.as_of_week < as_of_week)
+            .where(model.source == SOURCE, model.season == season, model.as_of_week < as_of_week)
             .order_by(model.as_of_week.desc())
             .limit(1)
         )
@@ -350,7 +352,9 @@ def _stale_flags(session, spec, accepted, season, as_of_week) -> list[str]:
         previous = {
             row.team_id: tuple(getattr(row, c) for c in columns)
             for row in session.scalars(
-                select(model).where(model.season == season, model.as_of_week == previous_week)
+                select(model).where(
+                    model.source == SOURCE, model.season == season, model.as_of_week == previous_week
+                )
             )
         }
         compared = [
@@ -408,10 +412,11 @@ def _load(session, csv_path, table_key, spec, rows, season, sidecar) -> ImportRe
                 model.team_id == team_id,
                 model.season == season,
                 model.as_of_week == sidecar.as_of_week,
+                model.source == SOURCE,
             )
         )
         if row is None:
-            row = model(team_id=team_id, season=season, as_of_week=sidecar.as_of_week)
+            row = model(team_id=team_id, season=season, as_of_week=sidecar.as_of_week, source=SOURCE)
             session.add(row)
         for name, (value, tolerance) in values.items():
             if value is None:

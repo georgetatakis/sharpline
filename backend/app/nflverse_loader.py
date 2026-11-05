@@ -42,7 +42,15 @@ from app.team_lookup import TeamLookup
 # Load order matters: scoring plays need their games.
 DATASETS = ("schedules", "play_by_play")
 TABLE_KEYS = {"schedules": "nflverse_schedules", "play_by_play": "nflverse_scoring_plays"}
-NFLREADR_FUNCTIONS = {"schedules": "load_schedules", "play_by_play": "load_pbp"}
+# Every file that needs a sidecar; the last four are read by app.nflverse_build (step 13).
+NFLREADR_FUNCTIONS = {
+    "schedules": "load_schedules",
+    "play_by_play": "load_pbp",
+    "pbp_participation": "load_participation",
+    "player_stats": "load_player_stats",
+    "snap_counts": "load_snap_counts",
+    "rosters": "load_rosters",
+}
 
 # nflverse gives kickoff as a local date and time in US Eastern.
 EASTERN = ZoneInfo("America/New_York")
@@ -126,35 +134,52 @@ def complete_through(games_per_week: pd.Series, played_per_week: pd.Series) -> i
     return week
 
 
+# The column holding each file's game id; rosters have none.
+GAME_ID_COLUMNS = {
+    "play_by_play": "game_id",
+    "pbp_participation": "nflverse_game_id",
+    "player_stats": "game_id",
+    "snap_counts": "game_id",
+}
+
+
 def covered_week(dataset: str, path: Path) -> int:
     """A file's as_of_week: the last week it covers in full.
 
     A Thursday final doesn't make its week covered: the week's other games haven't
-    been played. Play-by-play is measured against the season's schedule file.
+    been played. Other files are measured against the season's schedule file; a roster
+    is season-level, so it covers what the schedule covers.
     """
     schedule_path = path.parents[2] / "schedules" / path.parent.name / "schedules.csv.gz"
     if dataset == "schedules":
         df = pd.read_csv(path, usecols=["week", "home_score"])
         return complete_through(df.groupby("week").size(), df[df.home_score.notna()].groupby("week").size())
-    pbp = pd.read_csv(path, usecols=["game_id", "week"])
-    played = pbp.drop_duplicates("game_id").groupby("week").size()
     if not schedule_path.exists():
-        return int(played.index.max()) if len(played) else 0
-    return complete_through(pd.read_csv(schedule_path, usecols=["week"]).groupby("week").size(), played)
+        raise ImportRejected(f"{schedule_path} is missing; it's needed to tell which weeks {path.name} covers")
+    if dataset == "rosters":
+        return covered_week("schedules", schedule_path)
+    schedule = pd.read_csv(schedule_path, usecols=["game_id", "week"])
+    games = pd.read_csv(path, usecols=[GAME_ID_COLUMNS[dataset]]).iloc[:, 0].drop_duplicates()
+    played = schedule[schedule.game_id.isin(games)].groupby("week").size()
+    return complete_through(schedule.groupby("week").size(), played)
 
 
 def write_sidecars(root: Path, tz: ZoneInfo = EASTERN) -> list[str]:
     """Write each missing sidecar; one message per file."""
     downloaded, version, per_dataset = read_download_info(root, tz)
     messages = []
-    for dataset in DATASETS:
+    for dataset in NFLREADR_FUNCTIONS:
         for path in sorted((root / dataset).glob(f"*/{dataset}.csv.gz")):
             season = path.parent.name
             target = sidecar_path(path)
             if target.exists():
                 messages.append(f"{dataset} {season}: kept existing {target.name}")
                 continue
-            as_of_week = covered_week(dataset, path)
+            try:
+                as_of_week = covered_week(dataset, path)
+            except ImportRejected as exc:
+                messages.append(f"{dataset} {season}: no sidecar written, {exc}")
+                continue
             sidecar = {
                 "source_name": f"nflverse {dataset} (nflreadr {version})",
                 "source_url": f"nflreadr::{NFLREADR_FUNCTIONS[dataset]}({season})",

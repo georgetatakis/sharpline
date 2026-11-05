@@ -327,7 +327,7 @@ capped per bet and per game. Revisit thresholds after 100 graded bets per type.
 
 Core entities
 - `teams`: id, name, nickname, abbreviation, conference, division
-- `players`: id, name, team_id, position, nflverse_id
+- `players`: id, name, team_id, position, nflverse_id (gsis id), pfr_id (snap counts use it)
 - `games`: id, season, week, home_team_id, away_team_id, kickoff_time, status
   (scheduled, final), home_score, away_score, nflverse_game_id, game_type (REG, WC,
   DIV, CON, SB), neutral_site, home_qb_out, away_qb_out (manual flags), roof, temp,
@@ -339,8 +339,11 @@ Import tracking
 - `feature_sources` (config file, committed): for each team stat, whether the model
   reads nflverse or the screenshot, and the overlap-test correlation that decided it
 
-Team stats (wide tables, one row per team + season + as_of_week, each import fills
-its own columns by upsert; every column group records its source)
+Team stats (wide tables, one row per team + season + as_of_week + source; source is
+`screenshot` (the importer, each table_key filling its own columns by upsert) or
+`nflverse` (built from play-by-play and participation, season to date through
+as_of_week). nflverse rows also carry games_played, plays and success_rate. Models read
+them through one helper that returns only rows with as_of_week before the predicted week)
 - `team_offense_stats`: team_id, season, as_of_week, epa_per_play, yards_per_play,
   points_per_drive, explosive_play_rate, down_conversion_rate, motion_rate,
   play_action_rate, air_yards_per_att, shotgun_rate, no_huddle_rate, plays_per_game,
@@ -358,7 +361,7 @@ its own columns by upsert; every column group records its source)
   ypt_allowed_slot, def_proe, rz_td_rate_allowed, two_high_rate
 
 Game data (nflverse, or the sports feed as fallback)
-- `game_team_stats`: game_id, team_id, plays, total_yards, time_of_possession,
+- `game_team_stats` (built from play-by-play): game_id, team_id, plays, total_yards, time_of_possession,
   rush_attempts, rush_yards, pass_attempts, pass_completions, pass_yards, air_yards,
   sacks_taken, turnovers, penalties, penalty_yards, redzone_rush_attempts,
   redzone_targets, blitzes_faced, avg_pocket_time
@@ -378,9 +381,11 @@ Betting data
   captured_at, book_label
 
 Player data
-- `player_weekly_stats`: player_id, season, week, snaps, snap_share, targets,
+- `player_weekly_stats` (QB, RB, WR, TE, from nflverse player stats, snap counts and
+  play-by-play): player_id, season, week, game_id, team_id, snaps, snap_share, targets,
   target_share, carries, red_zone_touches, red_zone_targets, goal_line_carries,
-  air_yards, receiving_yards, rushing_yards, receptions, tds
+  air_yards, receiving_yards, rushing_yards, receptions, tds (rushing, receiving and
+  return TDs; passing TDs don't count)
 - `tracked_players`: season, week, player_id, rank_by_target_share (the 20 priced that week)
 
 Predictions and validation

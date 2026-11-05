@@ -404,9 +404,20 @@ def test_a_later_download_line_sets_that_datasets_time(tmp_path):
         "downloaded: 2026-10-23 00:29:50\nnflreadr: 1.5.1\n"
         "play_by_play 2026 downloaded 2026-11-05T10:20:06-0500 with nflreadr 1.5.1\n"
     )
+    schedules(tmp_path, [game()], meta=False)
     plays(tmp_path, [td_pass(1)], meta=False)
 
     write_sidecars(tmp_path)
 
     pbp = json.loads((tmp_path / "play_by_play" / "2026" / "play_by_play.meta.json").read_text())
     assert pbp["captured_at"] == "2026-11-05T10:20:06-05:00"
+
+
+def test_sidecar_needs_the_seasons_schedule_to_tell_the_weeks(tmp_path):
+    (tmp_path / "DOWNLOAD_INFO.txt").write_text("downloaded: 2026-10-23 00:29:50\nnflreadr: 1.5.1\n")
+    plays(tmp_path, [td_pass(1)], meta=False)
+
+    messages = write_sidecars(tmp_path)
+
+    assert any("no sidecar written" in m and "schedules.csv.gz is missing" in m for m in messages)
+    assert not (tmp_path / "play_by_play" / "2026" / "play_by_play.meta.json").exists()

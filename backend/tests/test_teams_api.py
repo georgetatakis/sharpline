@@ -101,3 +101,15 @@ def test_invalid_filters_are_422(client, kc, params):
     response = client.get(f"/teams/{kc}/offense", params=params)
 
     assert response.status_code == 422
+
+
+def test_source_filter_separates_screenshot_and_nflverse_rows(client, session, kc):
+    session.add(TeamOffenseStats(team_id=kc, season=2026, as_of_week=5, source="nflverse", epa_per_play=0.14))
+    session.commit()
+
+    both = client.get(f"/teams/{kc}/offense", params={"season": 2026, "as_of_week": 5}).json()
+    nflverse = client.get(f"/teams/{kc}/offense", params={"season": 2026, "source": "nflverse"}).json()
+
+    assert sorted(s["source"] for s in both["snapshots"]) == ["nflverse", "screenshot"]
+    assert [s["epa_per_play"] for s in nflverse["snapshots"]] == [0.14]
+    assert client.get(f"/teams/{kc}/offense", params={"source": "chat"}).status_code == 422
