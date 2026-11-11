@@ -7,10 +7,12 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import get_db
+from app.checklist import router as checklist_router
 from app.teams import router as teams_router
 
 app = FastAPI(title="Sharpline API")
 app.include_router(teams_router)
+app.include_router(checklist_router)
 
 app.add_middleware(
     CORSMiddleware,
