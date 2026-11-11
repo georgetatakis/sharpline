@@ -390,8 +390,10 @@ Player data
 
 Predictions and validation
 - `model_predictions`: game_id, model_type (game, prop, td), model_version, bet_type
-  (spread, moneyline, total), predicted_value, predicted_prob, market_prob, edge,
-  shrinkage, pick_price, closing_price, clv, snapshot_as_of_week, locked_at
+  (spread, moneyline, total), predicted_value, predicted_prob, market_line, market_prob,
+  edge, shrinkage, pick_price, closing_price, clv, snapshot_as_of_week, locked_at.
+  predicted_prob is for the home side or the over; market_line is the spread or total it
+  was priced against. One locked row per game, model_version and bet_type; never rewritten.
 - `player_predictions`: player_id, game_id, prop_type, model_version, predicted_value,
   predicted_prob, market_prob, edge, pick_price, closing_price, clv,
   snapshot_as_of_week, locked_at

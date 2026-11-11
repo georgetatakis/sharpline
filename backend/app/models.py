@@ -242,6 +242,45 @@ class GameScoringPlay(Base):
     # Filled once players are loaded (step 13).
     scorer_player_id: Mapped[int | None] = mapped_column(ForeignKey("players.id"))
 
+class ModelPrediction(Base):
+    """One locked pregame prediction: one game, one model version, one bet type.
+
+    predicted_prob is always for the home side (spread, moneyline) or the over (total).
+    For a spread, predicted_value is the model's home spread in sportsbook terms (-3.5 =
+    home by 3.5); for a total, the expected points. market_line is the posted spread or
+    total the probability was priced against, empty when no line was loaded. The market,
+    edge and price columns are filled by later steps (de-vig, edges, closing lines).
+    """
+
+    __tablename__ = "model_predictions"
+    __table_args__ = (
+        CheckConstraint("model_type IN ('game', 'prop', 'td')", name="model_type_valid"),
+        CheckConstraint("bet_type IN ('spread', 'moneyline', 'total')", name="bet_type_valid"),
+        CheckConstraint("predicted_prob >= 0 AND predicted_prob <= 1", name="prob_range"),
+        UniqueConstraint(
+            "game_id", "model_type", "model_version", "bet_type", name="uq_model_predictions_row"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    game_id: Mapped[int] = mapped_column(ForeignKey("games.id"))
+    model_type: Mapped[str] = mapped_column(String(4))
+    model_version: Mapped[str] = mapped_column(String(32))
+    bet_type: Mapped[str] = mapped_column(String(9))
+    predicted_value: Mapped[float | None]
+    predicted_prob: Mapped[float | None]
+    market_line: Mapped[float | None]
+    market_prob: Mapped[float | None]
+    edge: Mapped[float | None]
+    shrinkage: Mapped[float | None]
+    pick_price: Mapped[int | None]
+    closing_price: Mapped[int | None]
+    clv: Mapped[float | None]
+    # The latest team-stats week the prediction read; always before the game's week.
+    snapshot_as_of_week: Mapped[int]
+    locked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 class DataSnapshot(Base):
     """One import of one CSV: what was loaded, from where, and for which weeks.
 
