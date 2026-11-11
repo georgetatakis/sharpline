@@ -1,52 +1,41 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+import DataChecklist from "./DataChecklist.jsx";
+import SystemStatus from "./SystemStatus.jsx";
 
-function StatusRow({ label, state }) {
-  const styles = {
-    loading: "bg-gray-100 text-gray-600",
-    ok: "bg-green-100 text-green-800",
-    error: "bg-red-100 text-red-800",
-  };
-  const text = { loading: "Checking…", ok: "OK", error: "Unreachable" };
-
-  return (
-    <div className="flex items-center justify-between py-3">
-      <span className="font-medium text-gray-800">{label}</span>
-      <span className={`rounded-full px-3 py-1 text-sm font-semibold ${styles[state]}`}>
-        {text[state]}
-      </span>
-    </div>
-  );
-}
+const TABS = [
+  { id: "checklist", label: "Data Checklist", Component: DataChecklist },
+  { id: "status", label: "System Status", Component: SystemStatus },
+];
 
 export default function App() {
-  const [backend, setBackend] = useState("loading");
-  const [database, setDatabase] = useState("loading");
-
-  useEffect(() => {
-    fetch(`${API_URL}/health`)
-      .then(async (res) => {
-        // A 503 still means the API answered; only the database is down.
-        setBackend("ok");
-        const body = await res.json();
-        setDatabase(body.database === "ok" ? "ok" : "error");
-      })
-      .catch(() => {
-        setBackend("error");
-        setDatabase("error");
-      });
-  }, []);
+  const [tab, setTab] = useState("checklist");
+  const { Component } = TABS.find((t) => t.id === tab);
 
   return (
-    <main className="min-h-screen bg-gray-50 px-4 py-16">
-      <div className="mx-auto max-w-md rounded-xl bg-white p-6 shadow-sm">
+    <main className="min-h-screen bg-gray-50 px-4 py-8">
+      <div className="mx-auto max-w-3xl">
         <h1 className="text-2xl font-bold text-gray-900">Sharpline</h1>
-        <p className="mt-1 text-sm text-gray-500">System status</p>
-        <div className="mt-4 divide-y divide-gray-100">
-          <StatusRow label="Backend API" state={backend} />
-          <StatusRow label="Database" state={database} />
-        </div>
+        <nav role="tablist" className="mt-4 flex gap-1 border-b border-gray-200">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              role="tab"
+              aria-selected={tab === t.id}
+              onClick={() => setTab(t.id)}
+              className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium ${
+                tab === t.id
+                  ? "border-gray-900 text-gray-900"
+                  : "border-transparent text-gray-500 hover:text-gray-800"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </nav>
+      </div>
+      <div className="mt-6">
+        <Component />
       </div>
     </main>
   );
