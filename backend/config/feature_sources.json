@@ -1,0 +1,554 @@
+{
+  "generated_at": "2026-11-05T18:41:16+00:00",
+  "season": 2026,
+  "as_of_week": 5,
+  "threshold": 0.9,
+  "min_teams": 20,
+  "charted_plays_checksum": {
+    "charted_plays": 9597,
+    "nflverse_plays": 9658,
+    "ratio": 1.006356152964468
+  },
+  "stats": {
+    "offense.success_rate": {
+      "source": "nflverse",
+      "status": "nflverse_only",
+      "reason": "no screenshot of it",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "offense.epa_per_play": {
+      "source": "nflverse",
+      "status": "pass",
+      "reason": "correlation 0.962 > 0.9",
+      "teams": 32,
+      "correlation": 0.9617,
+      "mean_abs_gap": 0.0295,
+      "mean_gap": 0.0185
+    },
+    "offense.yards_per_play": {
+      "source": "nflverse",
+      "status": "pass",
+      "reason": "correlation 0.996 > 0.9",
+      "teams": 32,
+      "correlation": 0.9961,
+      "mean_abs_gap": 0.1061,
+      "mean_gap": 0.1015
+    },
+    "offense.points_per_drive": {
+      "source": "nflverse",
+      "status": "pass",
+      "reason": "correlation 0.998 > 0.9",
+      "teams": 32,
+      "correlation": 0.9976,
+      "mean_abs_gap": 0.0337,
+      "mean_gap": -0.0231
+    },
+    "offense.explosive_play_rate": {
+      "source": "screenshot",
+      "status": "fail",
+      "reason": "correlation 0.890 <= 0.9",
+      "teams": 32,
+      "correlation": 0.8897,
+      "mean_abs_gap": 0.0302,
+      "mean_gap": 0.0302
+    },
+    "offense.down_conversion_rate": {
+      "source": "nflverse",
+      "status": "pass",
+      "reason": "correlation 0.997 > 0.9",
+      "teams": 32,
+      "correlation": 0.9969,
+      "mean_abs_gap": 0.005,
+      "mean_gap": -0.0037
+    },
+    "offense.motion_rate": {
+      "source": "screenshot",
+      "status": "screenshot_only",
+      "reason": "not built from nflverse",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "offense.play_action_rate": {
+      "source": "screenshot",
+      "status": "screenshot_only",
+      "reason": "not built from nflverse",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "offense.air_yards_per_att": {
+      "source": "nflverse",
+      "status": "pass",
+      "reason": "correlation 0.964 > 0.9",
+      "teams": 32,
+      "correlation": 0.964,
+      "mean_abs_gap": 0.326,
+      "mean_gap": 0.2534
+    },
+    "offense.shotgun_rate": {
+      "source": "nflverse",
+      "status": "pass",
+      "reason": "correlation 0.997 > 0.9",
+      "teams": 32,
+      "correlation": 0.9966,
+      "mean_abs_gap": 0.0089,
+      "mean_gap": 0.0081
+    },
+    "offense.no_huddle_rate": {
+      "source": "nflverse",
+      "status": "pass",
+      "reason": "correlation 0.998 > 0.9",
+      "teams": 32,
+      "correlation": 0.9979,
+      "mean_abs_gap": 0.002,
+      "mean_gap": -0.0011
+    },
+    "offense.plays_per_game": {
+      "source": "nflverse",
+      "status": "pass",
+      "reason": "correlation 1.000 > 0.9",
+      "teams": 32,
+      "correlation": 1.0,
+      "mean_abs_gap": 0.0,
+      "mean_gap": 0.0
+    },
+    "offense.adj_plays_per_game": {
+      "source": "screenshot",
+      "status": "screenshot_only",
+      "reason": "not built from nflverse",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "offense.plays_per_drive": {
+      "source": "nflverse",
+      "status": "pass",
+      "reason": "correlation 0.956 > 0.9",
+      "teams": 32,
+      "correlation": 0.9557,
+      "mean_abs_gap": 0.2078,
+      "mean_gap": -0.2078
+    },
+    "offense.drives_per_game": {
+      "source": "nflverse",
+      "status": "pass",
+      "reason": "correlation 0.938 > 0.9",
+      "teams": 32,
+      "correlation": 0.9382,
+      "mean_abs_gap": 0.3938,
+      "mean_gap": 0.3938
+    },
+    "offense.time_of_possession": {
+      "source": "nflverse",
+      "status": "pass",
+      "reason": "correlation 0.943 > 0.9",
+      "teams": 32,
+      "correlation": 0.943,
+      "mean_abs_gap": 0.9575,
+      "mean_gap": 0.9575
+    },
+    "offense.play_clock_used": {
+      "source": "screenshot",
+      "status": "screenshot_only",
+      "reason": "not built from nflverse",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "offense.neutral_play_clock": {
+      "source": "screenshot",
+      "status": "screenshot_only",
+      "reason": "not built from nflverse",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "offense.neutral_pass_rate": {
+      "source": "screenshot",
+      "status": "fail",
+      "reason": "correlation 0.890 <= 0.9",
+      "teams": 32,
+      "correlation": 0.8896,
+      "mean_abs_gap": 0.0174,
+      "mean_gap": 0.0064
+    },
+    "offense.gear_change": {
+      "source": "screenshot",
+      "status": "screenshot_only",
+      "reason": "not built from nflverse",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "offense.pers_11": {
+      "source": "screenshot",
+      "status": "screenshot_only",
+      "reason": "nflverse participation data for this season isn't published yet",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "offense.pers_12": {
+      "source": "screenshot",
+      "status": "screenshot_only",
+      "reason": "nflverse participation data for this season isn't published yet",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "offense.pers_13": {
+      "source": "screenshot",
+      "status": "screenshot_only",
+      "reason": "nflverse participation data for this season isn't published yet",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "offense.pers_21": {
+      "source": "screenshot",
+      "status": "screenshot_only",
+      "reason": "nflverse participation data for this season isn't published yet",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "offense.pers_22": {
+      "source": "screenshot",
+      "status": "screenshot_only",
+      "reason": "nflverse participation data for this season isn't published yet",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "offense.pers_2te": {
+      "source": "screenshot",
+      "status": "screenshot_only",
+      "reason": "nflverse participation data for this season isn't published yet",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "offense.pers_2rb": {
+      "source": "screenshot",
+      "status": "screenshot_only",
+      "reason": "nflverse participation data for this season isn't published yet",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "offense.pers_3wr": {
+      "source": "screenshot",
+      "status": "screenshot_only",
+      "reason": "nflverse participation data for this season isn't published yet",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "offense.ol_pressure_rate_allowed": {
+      "source": "screenshot",
+      "status": "screenshot_only",
+      "reason": "nflverse participation data for this season isn't published yet",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "offense.ol_no_blitz_pressure_allowed": {
+      "source": "screenshot",
+      "status": "screenshot_only",
+      "reason": "nflverse participation data for this season isn't published yet",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "offense.time_to_throw": {
+      "source": "screenshot",
+      "status": "screenshot_only",
+      "reason": "nflverse participation data for this season isn't published yet",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "offense.ol_ybc_per_rb_rush": {
+      "source": "screenshot",
+      "status": "screenshot_only",
+      "reason": "not built from nflverse",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "offense.ol_rush_stuff_rate": {
+      "source": "nflverse",
+      "status": "pass",
+      "reason": "correlation 0.979 > 0.9",
+      "teams": 32,
+      "correlation": 0.9789,
+      "mean_abs_gap": 0.0134,
+      "mean_gap": 0.0134
+    },
+    "offense.off_proe": {
+      "source": "nflverse",
+      "status": "pass",
+      "reason": "correlation 0.955 > 0.9",
+      "teams": 28,
+      "correlation": 0.9553,
+      "mean_abs_gap": 0.0205,
+      "mean_gap": -0.0204
+    },
+    "offense.rz_td_rate": {
+      "source": "nflverse",
+      "status": "nflverse_only",
+      "reason": "no screenshot of it",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "defense.success_rate_allowed": {
+      "source": "nflverse",
+      "status": "nflverse_only",
+      "reason": "no screenshot of it",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "defense.epa_per_play_allowed": {
+      "source": "nflverse",
+      "status": "pass",
+      "reason": "correlation 0.931 > 0.9",
+      "teams": 32,
+      "correlation": 0.931,
+      "mean_abs_gap": 0.0296,
+      "mean_gap": 0.0183
+    },
+    "defense.yards_per_play_allowed": {
+      "source": "nflverse",
+      "status": "pass",
+      "reason": "correlation 0.990 > 0.9",
+      "teams": 32,
+      "correlation": 0.9902,
+      "mean_abs_gap": 0.102,
+      "mean_gap": 0.0964
+    },
+    "defense.points_per_drive_allowed": {
+      "source": "nflverse",
+      "status": "pass",
+      "reason": "correlation 0.996 > 0.9",
+      "teams": 32,
+      "correlation": 0.9955,
+      "mean_abs_gap": 0.0422,
+      "mean_gap": -0.0284
+    },
+    "defense.explosive_play_rate_allowed": {
+      "source": "screenshot",
+      "status": "fail",
+      "reason": "correlation 0.849 <= 0.9",
+      "teams": 32,
+      "correlation": 0.8492,
+      "mean_abs_gap": 0.0301,
+      "mean_gap": 0.0301
+    },
+    "defense.down_conversion_rate_allowed": {
+      "source": "nflverse",
+      "status": "pass",
+      "reason": "correlation 0.997 > 0.9",
+      "teams": 32,
+      "correlation": 0.997,
+      "mean_abs_gap": 0.0044,
+      "mean_gap": -0.0035
+    },
+    "defense.blitz_rate": {
+      "source": "screenshot",
+      "status": "screenshot_only",
+      "reason": "nflverse participation data for this season isn't published yet",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "defense.light_box_rate": {
+      "source": "screenshot",
+      "status": "screenshot_only",
+      "reason": "nflverse participation data for this season isn't published yet",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "defense.heavy_box_rate": {
+      "source": "screenshot",
+      "status": "screenshot_only",
+      "reason": "nflverse participation data for this season isn't published yet",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "defense.sub_package_rate": {
+      "source": "screenshot",
+      "status": "screenshot_only",
+      "reason": "nflverse participation data for this season isn't published yet",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "defense.dl_pressure_rate": {
+      "source": "screenshot",
+      "status": "screenshot_only",
+      "reason": "nflverse participation data for this season isn't published yet",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "defense.dl_no_blitz_pressure_rate": {
+      "source": "screenshot",
+      "status": "screenshot_only",
+      "reason": "nflverse participation data for this season isn't published yet",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "defense.dl_ybc_per_rb_rush": {
+      "source": "screenshot",
+      "status": "screenshot_only",
+      "reason": "not built from nflverse",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "defense.dl_rush_stuff_rate": {
+      "source": "screenshot",
+      "status": "fail",
+      "reason": "correlation 0.870 <= 0.9",
+      "teams": 32,
+      "correlation": 0.8698,
+      "mean_abs_gap": 0.0191,
+      "mean_gap": -0.0163
+    },
+    "defense.man_rate": {
+      "source": "screenshot",
+      "status": "screenshot_only",
+      "reason": "nflverse participation data for this season isn't published yet",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "defense.zone_rate": {
+      "source": "screenshot",
+      "status": "screenshot_only",
+      "reason": "nflverse participation data for this season isn't published yet",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "defense.middle_closed_rate": {
+      "source": "screenshot",
+      "status": "screenshot_only",
+      "reason": "nflverse participation data for this season isn't published yet",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "defense.middle_open_rate": {
+      "source": "screenshot",
+      "status": "screenshot_only",
+      "reason": "nflverse participation data for this season isn't published yet",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "defense.ypt_allowed_wr": {
+      "source": "nflverse",
+      "status": "pass",
+      "reason": "correlation 0.999 > 0.9",
+      "teams": 32,
+      "correlation": 0.9989,
+      "mean_abs_gap": 0.0342,
+      "mean_gap": 0.015
+    },
+    "defense.ypt_allowed_te": {
+      "source": "nflverse",
+      "status": "pass",
+      "reason": "correlation 1.000 > 0.9",
+      "teams": 32,
+      "correlation": 0.9997,
+      "mean_abs_gap": 0.0323,
+      "mean_gap": 0.0005
+    },
+    "defense.ypt_allowed_rb": {
+      "source": "nflverse",
+      "status": "pass",
+      "reason": "correlation 0.966 > 0.9",
+      "teams": 32,
+      "correlation": 0.9658,
+      "mean_abs_gap": 1.0802,
+      "mean_gap": -1.0802
+    },
+    "defense.ypt_allowed_outside": {
+      "source": "screenshot",
+      "status": "screenshot_only",
+      "reason": "not built from nflverse",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "defense.ypt_allowed_slot": {
+      "source": "screenshot",
+      "status": "screenshot_only",
+      "reason": "not built from nflverse",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    },
+    "defense.def_proe": {
+      "source": "nflverse",
+      "status": "pass",
+      "reason": "correlation 0.952 > 0.9",
+      "teams": 28,
+      "correlation": 0.9522,
+      "mean_abs_gap": 0.0189,
+      "mean_gap": -0.0189
+    },
+    "defense.rz_td_rate_allowed": {
+      "source": "nflverse",
+      "status": "nflverse_only",
+      "reason": "no screenshot of it",
+      "teams": 0,
+      "correlation": null,
+      "mean_abs_gap": null,
+      "mean_gap": null
+    }
+  }
+}

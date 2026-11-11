@@ -158,6 +158,27 @@ Builder rules:
 - Snap counts match by Pro Football Reference id, or by name, team and game when the
   roster lacks the id and the name is unique. Lines still unmatched are counted.
 
+### Overlap test (step 14)
+
+Before a model reads a team stat, the overlap test decides which source it comes from:
+
+```
+python -m app.overlap --season 2026 --as-of-week 5 \
+    --personnel-csv data/extracted/season-2026/week-06/personnel_usage.csv --write
+```
+
+It pairs each team's screenshot row with its nflverse row for that week and, per stat,
+reports the correlation across teams, the average gap and the bias (nflverse minus
+screenshot). A correlation above 0.9 with at least 20 paired teams reads nflverse;
+anything else stays on the screenshot. It also sums the screenshot's charted plays
+against nflverse's offensive plays as a checksum. The decisions are written to
+`backend/config/feature_sources.json`, which is committed. It holds only correlations
+and gaps, no team values. Models read a stat's source through
+`app.features.feature_source`.
+
+Rerun it when a new screenshot week or nflverse download could change a decision, for
+example once 2026 participation data is published.
+
 ## Templates
 
 `templates/` has a header-only `<table_key>.csv` and a blank `<table_key>.meta.json`
