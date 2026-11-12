@@ -226,7 +226,8 @@ means a usable screenshot or CSV exists.
 Minimum to get the game model running: nflverse schedules, scores and closing lines;
 the team stat tables (nflverse-built or screenshot, per the overlap test); and live
 spread, total and moneyline for the week's picks. Player and TD tables are only needed
-once Phase 4 starts.
+once Phase 4 starts, but prop lines and anytime-TD prices are logged from step 17c on,
+since their history can't be downloaded later.
 
 ---
 
@@ -243,7 +244,7 @@ once Phase 4 starts.
 | Deployment | Docker Compose (local), Render or Railway (hosted) |
 | CI/CD | GitHub Actions, added once the core app works |
 
-The Odds API is not used, and stays on the table as an optional step (step 39) once its
+The Odds API is not used, and stays on the table as an optional step (step 44) once its
 free plan is confirmed to cover the markets needed. The importer is source-agnostic and
 tags every snapshot with its source.
 
@@ -288,7 +289,8 @@ Other rules:
   and validate faster.
 - Training window: download 2018 on, train from 2021 on, with recent seasons weighted
   more (half-life about two seasons). Train once on 2021 on and once on 2018 on, and
-  keep whichever scores better on the latest held-out season.
+  keep whichever has the lower walk-forward log loss.
+- Paper-trade (log picks, no real stakes) until about 100 logged picks per bet type.
 - Era features (two-high rate, blitz and simulated-pressure rate, personnel rates)
   go in as inputs so the model sees the scheme, not just the season number.
 - Models start as v0 baselines with documented hand-set weights. v1 learned models
@@ -298,28 +300,37 @@ Other rules:
 
 ## Model types
 
-One simulator sits behind every bet. Team ratings give expected points, expected points
-give plays and pass rate, plays are divided among players, and 10,000 simulated games
-produce every probability from the same runs. Details live in `docs/model-plan.md`.
+One simulator sits behind every bet. Team ratings give each team's scoring chance per
+drive; 10,000 simulated games play every drive out to a touchdown, a field goal or
+nothing, so final scores, margins, totals and team touchdown counts all come from the
+same runs. Plays and pass rate from those runs are divided among players through one
+shared usage table (target, carry, red zone and goal-line shares). Every setting is in
+`docs/model-plan.md`.
 
-1. Game: margin, win probability and total from offense and defense EPA, points per
-   drive, pace, PROE, pressure and coverage tendencies, home field, rest, and the manual
-   QB-out flag. Moneyline is the margin's win probability; spread is margin against the
-   line; total is simulated points against the posted total.
-2. Player props: receiving yards and receptions (targets x catch rate x yards) and
-   rushing yards (carries x yards per carry), as distributions that price any line.
-   Opponent adjustment by position; hierarchical pooling for thin samples.
-3. Anytime TD: the team's expected touchdowns are fixed first, then divided among
-   players by red zone and goal-line share; P(TD) = 1 - e^(-rate).
+1. Game: margin, win probability and total from offense and defense EPA per play (60%)
+   and points per drive (40%), opponent-adjusted, plus pace, home field, rest, a hand-set
+   QB-out tier and wind. Moneyline is the margin's win probability; spread is margin
+   against the line (3 and 7 are key numbers); total is simulated points against the
+   posted total.
+2. Player props: receiving yards and receptions (targets x catch rate x yards), QB
+   passing yards (attempts x yards per attempt) and rushing yards (carries x yards per
+   carry), as distributions that price any line. Opponent adjustment by position, shrunk
+   toward average; player rates pulled toward position averages for thin samples.
+3. Anytime TD: the team's touchdowns come straight from the simulated drives, then are
+   divided among players by red zone and goal-line share; P(TD) = 1 - e^(-rate).
 
 Each model type has its own module, `model_version`, and rows in the results tables.
 They are never blended into one score.
 
-Edge and staking: edge is model probability minus de-vigged market probability, after
-shrinking the model toward the market. Minimum edges to start: spread 1.5 points,
-moneyline 4 points of probability (no price longer than +300 until 300 graded games),
-total 1.5 points, props and anytime TD 4 to 5 points. Stake at most quarter Kelly,
-capped per bet and per game. Revisit thresholds after 100 graded bets per type.
+Edge and staking: every price is de-vigged first (multiplicative, with Shin tested).
+Edge is model probability minus de-vigged market probability, after shrinking the model
+toward the market: 70% market and 30% model to start, moving toward the model only
+after closing line value is positive over 200+ bets. Minimum edges apply after
+shrinking: spread 1.5 points, moneyline 4 points of probability (no price longer than
++300 until 300 graded games), total 1.5 points, props and anytime TD 5 points. Stake
+quarter Kelly at most, capped at 1% of bankroll per bet and 3% per game (same-game bets,
+including same-team TD bets, are correlated). Revisit thresholds after 100 graded bets
+per type.
 
 ---
 
@@ -483,11 +494,21 @@ Structured logging for imports and model runs
 17. Simulator core and v0 game model: team ratings from hand-set weights, expected
     points per team, margin, win probability and total, manual QB-out flag; writes locked
     rows to `model_predictions`; run logging; tests
-18. De-vig utility (same-percentage method, raw prices kept) and the market-only
-    benchmark: the market's log loss and calibration on 2021 on
+17b. Drive-by-drive simulator: each drive ends in a touchdown, field goal or nothing,
+    giving whole-number scores (pushes on 3 and 7) and team touchdown counts; QB-out
+    flag becomes a hand-set points value per team (tiers: elite 6 to 8, average starter
+    3 to 4); rest days from nflverse home_rest and away_rest; tests
+17c. Start logging prop prices: migration for `player_prop_lines` and `tracked_players`,
+    tracked players (top 20 by target share each week), templates for sportsbook prop
+    screenshots, and the prop lines and anytime-TD odds import; tests. Moved up from
+    Phase 4 because prop price history isn't free
+18. De-vig utility (multiplicative method first, Shin tested beside it, raw prices kept)
+    and the market-only benchmark: the market's log loss and calibration on 2021 on
 19. Backtest runner: walk-forward on nflverse seasons, recency weights, log loss and
-    calibration against the market; compare 2018-on and 2021-on training; writes
-    `backtest_runs`
+    calibration against the market; compare 2018-on and 2021-on training; saves
+    per-game team stats and tests ridge opponent-adjusted ratings against raw averages;
+    checks home field, the 40/60 against 50/50 weights and simulator spread; fits wind
+    on total residuals; writes `backtest_runs`
 20. Live game lines: current spread and total (nflverse if updated, else chat CSV),
     moneylines and closing lines from sportsbook screenshots; source on every row; tests
 21. Settle script: after scores import, mark each locked prediction hit, miss, or push
@@ -498,44 +519,59 @@ Structured logging for imports and model runs
 24. Weekly results endpoint: `/models/game/weekly-results?week=&season=`
 25. Frontend "Weekly Check" tab: every game of the selected week, predicted spread,
     total and winner against the actual result, outcome marked, "pending" for unplayed games
-26. Edge endpoint: `/games/{id}/edge` with shrinkage, minimum edges, and the +300 price cap; tests
+26. Edge endpoint: `/games/{id}/edge` with shrinkage (70% market to start), minimum
+    edges after shrinking, the +300 price cap, quarter Kelly capped 1% per bet and 3% per
+    game; tests
 27. Frontend "Value Board": ranked edges by bet type, labeled with model version and sample size
 28. Learned v1: ridge regression on the backfill (2021 on, recency weighted), compared with
     v0 and the market in the backtest and in forward grading; boosted trees only if
-    they beat ridge on held-out seasons
+    they beat ridge on held-out seasons; fit the shrinkage weight by regressing results
+    on the market line and the model
 
-### Phase 4: Player props
-29. Migration for `player_prop_lines`, `tracked_players`, and prediction columns for props
-30. Tracked players: pick the top 20 by target share each week; templates for sportsbook
-    prop screenshots (about 8 images a week)
-31. Prop lines and anytime-TD odds import (four markets, tracked players only); tests
-32. Receiving props v0: targets x catch rate x yards per catch, negative binomial and
-    gamma, driven by the game simulator; opponent adjustment by position; run logging
-33. Settle receiving props from nflverse player results; pushes handled; hit-rate and CLV tracking
+### Phase 4: Player props (receiving and QB passing first)
+29. Shared usage table from nflverse play-by-play: target share, carry share, red zone
+    and goal-line shares (from yardline_100), end zone targets; recency-weighted season
+    plus last 4 weeks; receiving, QB passing, rushing and anytime TD all read it; tests
+30. Receiving props v0: team pass attempts from the simulator (expected pass rate from
+    nflfastR xpass plus game script) x target share, then catches, then yards (negative
+    binomial targets, catch rate and yards per catch pulled toward position averages
+    with about 40 to 60 targets of prior weight); opponent yards per target by position
+    shrunk 75% toward average; shares renormalized to sum to 1; run logging
+31. Settle receiving props from nflverse player results; pushes handled; hit-rate and CLV tracking
+32. QB passing yards v0: the same team pass attempts x yards per attempt (QB's season
+    pulled toward league average, opponent pass defense shrunk 75%); QB-out tiers;
+    needs passing columns in `player_weekly_stats`; run logging
+33. Settle QB passing props
 34. Frontend: player prop comparison view
-35. Rushing props v0: carries x yards per carry from the simulator's game script; run logging
-36. Settle rushing props
-37. Extend the Weekly Check tab to props (predicted against actual stat line, outcome, filter by prop type)
-38. Learned player model v1: hierarchical or boosted model on 2021 on, beside v0
-39. (Optional) Odds API check: confirm the free plan includes the markets needed and
+35. Extend the Weekly Check tab to props (predicted against actual stat line, outcome, filter by prop type)
+
+### Phase 5: Anytime TD model
+36. TD model v0: team rushing and receiving TDs from the simulated drives, divided by
+    the usage table's red zone and goal-line shares over the full season with recency
+    weights; opponent TDs allowed by position shrunk toward average; QB rushing TDs in,
+    defense and special teams out; P(TD) = 1 - e^(-rate); run logging
+37. Settle the TD model from `game_scoring_plays`; hit-rate, calibration and CLV tracking
+38. Frontend: TD probability leaderboard
+39. Extend the Weekly Check tab to anytime-TD picks (did the player score, yes or no)
+
+### Phase 5b: Rushing props and learned player models
+40. Rushing props v0: carries from the simulator's game script x carry share; yards per
+    carry bootstrapped from the player's real carries, pulled toward position average;
+    opponent yards per carry allowed shrunk hard toward average; no running QBs, no
+    carries props; run logging
+41. Settle rushing props
+42. Learned player model v1: hierarchical or boosted model on 2021 on, beside v0
+43. Learned TD v1: logistic or boosted model on 2021 on, beside v0
+44. (Optional) Odds API check: confirm the free plan includes the markets needed and
     the credit cost; if yes, add a script that writes the same CSV and sidecar format,
     with the key in `.env`
 
-### Phase 5: Anytime TD model
-40. Red zone and goal-line features from nflverse play-by-play (team and player)
-41. TD model v0: team touchdown pool from expected points, divided by red zone and
-    goal-line share; P(TD) = 1 - e^(-rate); run logging
-42. Settle the TD model from `game_scoring_plays`; hit-rate, calibration and CLV tracking
-43. Frontend: TD probability leaderboard
-44. Extend the Weekly Check tab to anytime-TD picks (did the player score, yes or no)
-45. Learned TD v1: logistic or boosted model on 2021 on, beside v0
-
 ### Phase 6: Polish, CI/CD, deployment
-46. GitHub Actions: run the full pytest suite on every PR
-47. Demo mode: seed synthetic sample data so a public deployment and README screenshots never show third-party numbers
-48. Deploy to Render or Railway: Postgres, backend, frontend live; secrets set in the host's secret manager
-49. README and architecture doc, with the current hit rate and CLV for each model type near the top
-50. (Optional, later) Auth: `users` table and saved picks, only when opening this to other people
+45. GitHub Actions: run the full pytest suite on every PR
+46. Demo mode: seed synthetic sample data so a public deployment and README screenshots never show third-party numbers
+47. Deploy to Render or Railway: Postgres, backend, frontend live; secrets set in the host's secret manager
+48. README and architecture doc, with the current hit rate and CLV for each model type near the top
+49. (Optional, later) Auth: `users` table and saved picks, only when opening this to other people
 
 ---
 
